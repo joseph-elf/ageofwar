@@ -61,6 +61,18 @@ The same fields can be set at build time with `VITE_PEER_HOST`, `VITE_PEER_PORT`
 
 Hover any button for a tooltip with stats and its shortcut.
 
+## Phones & tablets
+
+Play in **landscape**. The canvas fills the whole screen (Phaser `EXPAND`), and the HUD switches to a compact, touch-sized layout on short
+screens. In portrait a "rotate your phone" screen appears (single-player auto-pauses until you rotate back).
+
+* **Tap** a unit/turret/slot/special/evolve button to use it. **Long-press** a button to read its stats (keyboard hints are hidden on touch).
+* **Drag** the battlefield or the minimap to scroll. The ⛶ button enters fullscreen and locks landscape where the browser allows it.
+* The screen is kept awake during a match (Wake Lock API, where supported).
+* To test on a phone, run `npm run dev -- --host` and open the printed network URL (use the same Wi-Fi). WebRTC multiplayer from a
+  phone needs HTTPS in production (deploy it, or use a tunnel).
+* A hosted match needs the host's browser kept in the foreground on mobile; mobile OSes pause background tabs.
+
 ## Where to tweak balance
 
 **Start with [`src/data/tuning.ts`](src/data/tuning.ts)** – the single file of dials:

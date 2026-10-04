@@ -39,6 +39,9 @@ export class Hud {
   private resultShown = false;
   private mmDrag = false;
   private frames = 0;
+  private compact = false;
+  private rotatePaused = false;
+  private coarse = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 
   constructor(private root: HTMLElement, private ctl: GameController, private host: HudHost, private actions: HudActions) {
     root.innerHTML = `
@@ -56,6 +59,7 @@ export class Hud {
         <div class="tools">
           <span class="ping" data-r="ping"></span>
           <button data-r="btn-pause" data-tip="Pause (P / Esc)">II</button>
+          <button data-r="btn-full" class="hidden" data-tip="Fullscreen">⛶</button>
           <button data-r="btn-mute" data-tip="Mute / unmute (M)">♪</button>
           <button data-r="btn-quit" data-tip="Leave game">✕</button>
         </div>
@@ -80,7 +84,8 @@ export class Hud {
       <div class="overlay hidden" data-r="pause"><div class="card"><h2 data-r="pausetitle">Paused</h2><p data-r="pausetext"></p><div class="row"><button data-r="resume" class="primary">Resume</button><button data-r="quit" class="danger">Leave game</button></div></div></div>
       <div class="overlay hidden" data-r="result"><div class="card result"><h1 data-r="restitle"></h1><p data-r="resreason"></p><div data-r="resstats"></div><div class="row"><button data-r="rematch" class="primary">Play again</button><button data-r="menu">Main menu</button></div></div></div>
     </div>
-    <div class="tooltip hidden"></div>`;
+    <div class="tooltip hidden"></div>
+    <div class="rotate hidden"><div><span>↻</span><p>Rotate your phone to landscape to play</p></div></div>`;
     this.layer = $(root, '.hud-layer');
     this.tip = $(root, '.tooltip');
     root.classList.remove('hidden');
@@ -123,13 +128,71 @@ export class Hud {
     this.r(name).classList.toggle(c, on);
   }
 
+  /**
+   * The HUD is a real-pixel layer covering the window, scaled by `z` so controls stay a comfortable size: on phones
+   * (short screens) a compact layout is used at a larger zoom; on desktop z follows the window height.
+   */
   private fit(): void {
-    const k = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
-    this.layer.style.transform = `translate(-50%, -50%) scale(${k})`;
+    const w = window.innerWidth;
+    const h = window.innerHeight;
+    this.compact = h < 560 || w < 700;
+    const z = this.compact ? Math.max(0.6, h / 470) : Math.min(1.3, Math.max(0.8, h / 720));
+    this.layer.style.width = `${w / z}px`;
+    this.layer.style.height = `${h / z}px`;
+    this.layer.style.transform = `scale(${z})`;
+    this.layer.classList.toggle('compact', this.compact);
+    const portrait = this.coarse && h > w * 1.1;
+    $(this.root, '.rotate').classList.toggle('hidden', !portrait);
+    if (portrait && this.ctl.canPause && !this.ctl.paused && !this.ctl.result()) {
+      this.ctl.paused = true;
+      this.rotatePaused = true;
+    } else if (!portrait && this.rotatePaused) {
+      this.ctl.paused = false;
+      this.rotatePaused = false;
+    }
+  }
+
+  /** Height in screen px of the bottom panel (the scene keeps the ground above it). */
+  bottomInset(): number {
+    return $(this.layer, '.bottom').getBoundingClientRect().height;
   }
 
   // ------------------------------------------------------------------ building blocks
   private tipFor(el: HTMLElement, html: () => string): void {
+    if (this.coarse) {
+      // Touch: tap acts normally, long-press shows the tooltip (and swallows the tap that follows).
+      let timer = 0;
+      let shown = false;
+      el.addEventListener('pointerdown', () => {
+        shown = false;
+        clearTimeout(timer);
+        timer = window.setTimeout(() => {
+          shown = true;
+          this.showTip(el, html());
+          navigator.vibrate?.(15);
+        }, 450);
+      });
+      const end = () => {
+        clearTimeout(timer);
+        if (shown) window.setTimeout(() => this.tip.classList.add('hidden'), 2200);
+      };
+      el.addEventListener('pointerup', end);
+      el.addEventListener('pointerleave', () => clearTimeout(timer));
+      el.addEventListener('pointercancel', end);
+      el.addEventListener(
+        'click',
+        (e) => {
+          if (shown) {
+            e.stopImmediatePropagation();
+            e.preventDefault();
+            shown = false;
+          }
+        },
+        true,
+      );
+      el.addEventListener('contextmenu', (e) => e.preventDefault());
+      return;
+    }
     el.addEventListener('mouseenter', () => this.showTip(el, html()));
     el.addEventListener('mousemove', () => this.showTip(el, html()));
     el.addEventListener('mouseleave', () => this.tip.classList.add('hidden'));
@@ -153,6 +216,15 @@ export class Hud {
     this.r('btn-pause').onclick = () => this.togglePause();
     this.r('btn-mute').onclick = () => this.toggleMute();
     this.r('btn-quit').onclick = () => this.openLeave();
+    if (document.fullscreenEnabled) {
+      const fs = this.r('btn-full');
+      fs.classList.remove('hidden');
+      fs.onclick = () => {
+        if (document.fullscreenElement) void document.exitFullscreen();
+        else
+          void document.documentElement.requestFullscreen().then(() => (screen.orientation as unknown as { lock?: (o: string) => Promise<void> }).lock?.('landscape')?.catch(() => {}), () => {});
+      };
+    }
     this.r('resume').onclick = () => this.closePause();
     this.r('quit').onclick = () => this.actions.onQuit();
     this.r('menu').onclick = () => this.actions.onQuit();

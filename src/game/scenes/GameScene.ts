@@ -17,8 +17,7 @@ export interface GameSceneData {
   onRematch?: () => void;
 }
 
-export const W = 1280;
-export const H = 720;
+const COARSE = typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches;
 export const GROUND_Y = 560;
 const FOOT_Y = GROUND_Y + 6;
 const SCALE = 2;
@@ -101,10 +100,11 @@ export class GameScene extends Phaser.Scene implements HudHost {
   // ------------------------------------------------------------------ HudHost
   getView() {
     const c = this.cameras.main;
-    return { scroll: c.scrollX, width: W, min: -260, max: LANE_LENGTH + 260 - W };
+    return { scroll: c.scrollX, width: this.scale.width, min: -260, max: LANE_LENGTH + 260 - this.scale.width };
   }
   setScroll(x: number): void {
-    this.cameras.main.scrollX = Phaser.Math.Clamp(x, -260, LANE_LENGTH + 260 - W);
+    const max = LANE_LENGTH + 260 - this.scale.width;
+    this.cameras.main.scrollX = max < -260 ? (max - 260) / 2 : Phaser.Math.Clamp(x, -260, max);
   }
   fps(): number {
     return this.game.loop.actualFps;
@@ -113,14 +113,14 @@ export class GameScene extends Phaser.Scene implements HudHost {
   // ------------------------------------------------------------------ create
   create(): void {
     const cam = this.cameras.main;
-    cam.setBounds(-260, 0, LANE_LENGTH + 520, H);
+    cam.setBounds(-260, -3000, LANE_LENGTH + 520, 6000);
     cam.scrollX = -90; // my base is always on the left of the screen (the view is mirrored for the guest)
     cam.setBackgroundColor('#000000');
 
-    this.sky = this.add.tileSprite(0, 0, W / SCALE, H / SCALE, 'bg:0:sky').setOrigin(0).setScale(SCALE).setScrollFactor(0).setDepth(-100);
-    this.far = this.add.tileSprite(0, -30, W / SCALE, H / SCALE, 'bg:0:far').setOrigin(0).setScale(SCALE).setScrollFactor(0).setDepth(-90);
-    this.mid = this.add.tileSprite(0, -110, W / SCALE, H / SCALE, 'bg:0:mid').setOrigin(0).setScale(SCALE).setScrollFactor(0).setDepth(-80);
-    this.ground = this.add.tileSprite(-400, GROUND_Y, (LANE_LENGTH + 800) / SCALE, 80, 'ground:0').setOrigin(0).setScale(SCALE).setDepth(-50);
+    this.sky = this.add.tileSprite(0, 0, this.scale.width / SCALE, this.scale.height / SCALE, 'bg:0:sky').setOrigin(0).setScale(SCALE).setScrollFactor(0).setDepth(-100);
+    this.far = this.add.tileSprite(0, -30, this.scale.width / SCALE, this.scale.height / SCALE, 'bg:0:far').setOrigin(0).setScale(SCALE).setScrollFactor(0).setDepth(-90);
+    this.mid = this.add.tileSprite(0, -110, this.scale.width / SCALE, this.scale.height / SCALE, 'bg:0:mid').setOrigin(0).setScale(SCALE).setScrollFactor(0).setDepth(-80);
+    this.ground = this.add.tileSprite(-400, GROUND_Y, (LANE_LENGTH + 800) / SCALE, 240, 'ground:0').setOrigin(0).setScale(SCALE).setDepth(-50);
 
     // bases + turret slots
     for (const side of [0, 1]) {
@@ -160,8 +160,8 @@ export class GameScene extends Phaser.Scene implements HudHost {
 
     const onMove = (e: MouseEvent) => {
       const r = this.game.canvas.getBoundingClientRect();
-      this.mouse.x = ((e.clientX - r.left) / r.width) * W;
-      this.mouse.y = ((e.clientY - r.top) / r.height) * H;
+      this.mouse.x = ((e.clientX - r.left) / r.width) * this.scale.width;
+      this.mouse.y = ((e.clientY - r.top) / r.height) * this.scale.height;
       this.mouse.inside = e.clientX >= r.left && e.clientX <= r.right && e.clientY >= r.top && e.clientY <= r.bottom;
     };
     window.addEventListener('mousemove', onMove);
@@ -172,6 +172,10 @@ export class GameScene extends Phaser.Scene implements HudHost {
       onRematch: this.data0.onRematch,
     });
     this.cleanup.push(() => this.hud.destroy());
+    this.scale.on('resize', this.layout, this);
+    this.cleanup.push(() => this.scale.off('resize', this.layout, this));
+    this.layout();
+    this.time.delayedCall(250, () => this.layout()); // once the HUD has measured itself
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, () => {
       this.cleanup.forEach((f) => f());
       this.ctl.destroy();
@@ -179,6 +183,23 @@ export class GameScene extends Phaser.Scene implements HudHost {
       this.projs.clear();
     });
     this.applyAge(this.ctl.state.players[this.me].age);
+  }
+
+  /**
+   * Fits the world to the current screen: stretches the background layers and shifts the view vertically so the
+   * ground (and the units walking on it) always sits just above the bottom HUD panel, whatever the aspect ratio.
+   */
+  private layout(): void {
+    const w = this.scale.width;
+    const h = this.scale.height;
+    const k = this.scale.displaySize.width / w || 1; // screen px per world px
+    const inset = this.hud ? this.hud.bottomInset() / k : 150;
+    const shift = Phaser.Math.Clamp(GROUND_Y + 30 + inset - h, -400, 300);
+    this.cameras.main.scrollY = shift;
+    this.sky.setSize(w / SCALE, h / SCALE);
+    this.far.setSize(w / SCALE, h / SCALE).setY(-30 - shift);
+    this.mid.setSize(w / SCALE, h / SCALE).setY(-110 - shift);
+    this.setScroll(this.cameras.main.scrollX);
   }
 
   private applyAge(age: number): void {
@@ -227,9 +248,9 @@ export class GameScene extends Phaser.Scene implements HudHost {
     if (this.keys.LEFT.isDown || this.keys.A.isDown) v -= 1;
     if (this.keys.RIGHT.isDown || this.keys.D.isDown) v += 1;
     const edge = 22;
-    if (this.mouse.inside && !this.drag?.moved && this.mouse.y < GROUND_Y + 10) {
+    if (!COARSE && this.mouse.inside && !this.drag?.moved && this.mouse.y < this.scale.height - 160) {
       if (this.mouse.x < edge) v -= 1;
-      else if (this.mouse.x > W - edge) v += 1;
+      else if (this.mouse.x > this.scale.width - edge) v += 1;
     }
     if (v) this.setScroll(this.cameras.main.scrollX + v * 900 * dt);
   }
@@ -465,13 +486,13 @@ export class GameScene extends Phaser.Scene implements HudHost {
     const name = SPECIALS[def].name.toUpperCase();
     sfx.play(`special_${SPECIAL_INDEX[def]}` as Sfx);
     this.cameras.main.shake(500, 0.004);
-    const cx = this.cameras.main.scrollX + W / 2;
+    const cx = this.cameras.main.scrollX + this.scale.width / 2;
     this.floatText(cx, 150, name + '!', owner === this.me ? '#7ee0ff' : '#ff7a7a', 36, 1800, true);
     if (def === 'airstrike') {
       const fromLeft = this.vside(owner) === 0;
       const y = 110;
-      const x0 = this.cameras.main.scrollX + (fromLeft ? -80 : W + 80);
-      const x1 = this.cameras.main.scrollX + (fromLeft ? W + 80 : -80);
+      const x0 = this.cameras.main.scrollX + (fromLeft ? -80 : this.scale.width + 80);
+      const x1 = this.cameras.main.scrollX + (fromLeft ? this.scale.width + 80 : -80);
       const plane = this.add.image(x0, y, 'fx:plane').setScale(3).setFlipX(!fromLeft).setDepth(9500);
       this.tweens.add({ targets: plane, x: x1, duration: 3200, onComplete: () => plane.destroy() });
     }

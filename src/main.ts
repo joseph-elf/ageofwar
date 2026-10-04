@@ -16,7 +16,8 @@ const game = new Phaser.Game({
   backgroundColor: '#0b0d18',
   pixelArt: true,
   roundPixels: true,
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scale: { mode: Phaser.Scale.EXPAND, autoCenter: Phaser.Scale.CENTER_BOTH }, // fills any screen; the world adapts in GameScene.layout()
+  input: { touch: { capture: true }, windowEvents: true },
   scene: [BootScene, GameScene],
 });
 
@@ -24,11 +25,18 @@ const gameEl = document.getElementById('game')!;
 let inMatch = false;
 let current: GameController | null = null;
 // Closing/reloading the tab = leaving: tells the opponent immediately instead of making them wait out the grace period.
-window.addEventListener('pagehide', () => current?.online && current.destroy());
+window.addEventListener('pagehide', (e) => !e.persisted && current?.online && current.destroy());
+
+// Keep a phone's screen awake during a match.
+let wake: WakeLockSentinel | null = null;
+const keepAwake = () => void navigator.wakeLock?.request('screen').then((w) => (wake = w), () => {});
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && inMatch && keepAwake());
 
 function showMenu(screen: Parameters<Menu['show']>[0] = 'main'): void {
   if (inMatch) game.scene.stop('Game');
   inMatch = false;
+  void wake?.release();
+  wake = null;
   gameEl.classList.add('hidden');
   menu.show(screen);
 }
@@ -41,6 +49,7 @@ function startMatch(controller: GameController, rematch?: () => void): void {
   if (inMatch) game.scene.stop('Game');
   inMatch = true;
   current = controller;
+  keepAwake();
   game.scene.start('Game', data);
 }
 

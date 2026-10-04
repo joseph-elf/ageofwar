@@ -18,8 +18,7 @@ class AudioEngine {
   constructor() {
     onSettingsChange(() => this.applyVolume());
     const unlock = () => this.unlock();
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
+    for (const ev of ['pointerdown', 'touchend', 'click', 'keydown']) window.addEventListener(ev, unlock);
   }
 
   unlock(): void {

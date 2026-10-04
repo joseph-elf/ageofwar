@@ -10,10 +10,11 @@
   --dim: #98a0c8;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; background: var(--bg); color: var(--ink); overflow: hidden; font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; user-select: none; }
+html, body { margin: 0; height: 100%; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; background: var(--bg); color: var(--ink); overflow: hidden; font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; user-select: none; }
 .hidden { display: none !important; }
 #game { position: fixed; inset: 0; }
-#game canvas { image-rendering: pixelated; display: block; }
+#game canvas { image-rendering: pixelated; display: block; touch-action: none; }
+button, .minimap { touch-action: manipulation; }
 #hud-root { position: fixed; inset: 0; pointer-events: none; }
 #menu-root { position: fixed; inset: 0; }
 
@@ -66,11 +67,11 @@ kbd { background: #2a3050; border: 1px solid #4a5280; border-bottom-width: 2px; 
 .form input[type='range'] { flex: 1; max-width: 300px; }
 code { background: #0b0d18; padding: 1px 5px; border-radius: 4px; }
 
-/* ---------- HUD (a fixed 1280x720 layer that is scaled to fit the window, matching the canvas) */
-.hud-layer { position: absolute; left: 50%; top: 50%; width: 1280px; height: 720px; transform-origin: center; pointer-events: none; font-size: 14px; text-shadow: 0 1px 2px #000; }
+/* ---------- HUD: a layer covering the window; hud.ts sizes it (width/height/scale) so controls stay readable on any screen */
+.hud-layer { position: absolute; left: 0; top: 0; transform-origin: 0 0; pointer-events: none; padding: 0; font-size: 14px; text-shadow: 0 1px 2px #000; }
 .hud-layer button, .hud-layer .tooltip, .hud-layer canvas, .hud-layer .overlay, .hud-layer .gold, .hud-layer .xpwrap, .hud-layer .debug, .hud-layer .slot { pointer-events: auto; }
-.top { position: absolute; left: 0; right: 0; top: 0; height: 58px; display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: linear-gradient(rgba(8, 10, 22, 0.85), transparent); }
-.res { display: flex; align-items: center; gap: 12px; width: 380px; }
+.top { gap: 8px; position: absolute; left: 0; right: 0; top: 0; height: 58px; padding-top: env(safe-area-inset-top); display: flex; align-items: center; justify-content: space-between; padding: 0 12px; background: linear-gradient(rgba(8, 10, 22, 0.85), transparent); }
+.res { display: flex; align-items: center; gap: 12px; flex: 0 0 auto; }
 .gold { display: flex; align-items: center; gap: 8px; font-size: 24px; color: var(--gold); min-width: 96px; }
 .coin { width: 20px; height: 20px; border-radius: 50%; background: radial-gradient(circle at 35% 35%, #fff2a8, #f5c542 55%, #b8841a); border: 2px solid #7a5410; }
 .xpbar { position: relative; width: 240px; height: 22px; background: #0b0d18; border: 2px solid var(--edge); border-radius: 5px; overflow: hidden; }
@@ -83,20 +84,20 @@ code { background: #0b0d18; padding: 1px 5px; border-radius: 4px; }
 .hpbar.them i { inset: 0 0 0 auto; background: linear-gradient(#ff8a8a, #b82a2a); }
 .hpbar span { position: absolute; inset: 0; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
 .vs { display: flex; flex-direction: column; align-items: center; min-width: 190px; line-height: 1.1; } .vs b { font-size: 12px; } .vs small { color: var(--dim); font-size: 11px; }
-.tools { display: flex; align-items: center; gap: 6px; width: 380px; justify-content: flex-end; }
+.tools { display: flex; align-items: center; gap: 6px; flex: 0 0 auto; justify-content: flex-end; }
 .tools button { padding: 4px 10px; font-size: 14px; }
 .ping { color: var(--dim); font-size: 12px; margin-right: 6px; }
-.minimap { position: absolute; left: 290px; top: 62px; width: 700px; height: 26px; border: 2px solid var(--edge); border-radius: 5px; cursor: pointer; }
+.minimap { position: absolute; left: 50%; transform: translateX(-50%); top: 62px; width: min(700px, 52%); height: 26px; border: 2px solid var(--edge); border-radius: 5px; cursor: pointer; }
 .fps { position: absolute; right: 12px; top: 62px; color: var(--green); font: 700 12px monospace; }
 .toast { position: absolute; left: 50%; bottom: 168px; transform: translateX(-50%); background: rgba(0, 0, 0, 0.8); border: 2px solid var(--red); color: #ffd0d0; padding: 6px 16px; border-radius: 6px; opacity: 0; transition: opacity 0.2s; font-weight: 700; }
 .toast.show { opacity: 1; }
 .banner { position: absolute; left: 50%; top: 110px; transform: translateX(-50%); background: rgba(40, 20, 0, 0.9); border: 2px solid var(--gold); color: var(--gold); padding: 10px 24px; border-radius: 8px; font-size: 18px; font-weight: 700; display: none; }
 .banner.show { display: block; }
 
-.bottom { position: absolute; left: 0; right: 0; bottom: 0; height: 152px; display: flex; gap: 10px; padding: 8px 10px; background: linear-gradient(transparent, rgba(6, 8, 18, 0.92) 25%); }
+.bottom { position: absolute; left: 0; right: 0; bottom: 0; min-height: 152px; display: flex; gap: 10px; padding: 8px max(10px, env(safe-area-inset-right)) max(8px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left)); background: linear-gradient(transparent, rgba(6, 8, 18, 0.92) 25%); }
 .panel { position: relative; background: var(--panel); border: 2px solid var(--edge); border-radius: 8px; padding: 6px 10px 8px; pointer-events: auto; }
 .panel h4 { margin: 0 0 4px; font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: var(--dim); }
-.panel.units { width: 470px; } .panel.turrets { width: 440px; } .panel.actions { flex: 1; display: flex; align-items: center; justify-content: space-around; gap: 8px; }
+.panel.units { flex: 0 0 auto; } .panel.turrets { flex: 0 0 auto; } .panel.actions { flex: 1; display: flex; align-items: center; justify-content: space-around; gap: 8px; }
 .ubtns, .tbtns, .slots, .queue { display: flex; gap: 6px; }
 .ubtn, .tbtn { position: relative; width: 84px; height: 70px; padding: 4px; display: grid; place-items: center; }
 .tbtn { width: 84px; height: 56px; }
@@ -139,3 +140,55 @@ code { background: #0b0d18; padding: 1px 5px; border-radius: 4px; }
 .tooltip table { border-collapse: collapse; font-size: 12px; } .tooltip td { padding: 1px 10px 1px 0; } .tooltip td:first-child { color: var(--dim); }
 .debug { position: absolute; left: 10px; top: 100px; background: rgba(0, 0, 0, 0.8); border: 2px solid var(--green); border-radius: 6px; padding: 8px; font: 12px monospace; color: var(--green); }
 .debug pre { margin: 6px 0; } .debug button { padding: 3px 8px; font-size: 12px; margin-right: 4px; }
+
+/* ---------- touch devices */
+@media (pointer: coarse) {
+  .key, .hud-layer .special .key { display: none !important; }
+  button:hover:not(:disabled) { background: #232a4a; }
+  .menu-bg { -webkit-overflow-scrolling: touch; }
+}
+.rotate { position: fixed; inset: 0; z-index: 100; background: #0b0d18; display: grid; place-items: center; text-align: center; pointer-events: auto; padding: 24px; }
+.rotate span { display: block; font-size: 72px; color: var(--gold); animation: spin 2.5s ease-in-out infinite; }
+.rotate p { font-size: 18px; color: var(--ink); max-width: 260px; margin: 8px auto 0; }
+@keyframes spin { 50% { transform: rotate(-90deg); } }
+.hud-layer .overlay { pointer-events: auto; }
+
+/* ---------- compact HUD (phones in landscape) */
+.hud-layer.compact { font-size: 12px; }
+.compact .top { height: 40px; padding: 0 8px; }
+.compact .res { gap: 8px; } .compact .gold { font-size: 18px; min-width: 62px; } .compact .coin { width: 15px; height: 15px; }
+.compact .xpbar { width: 140px; height: 18px; } .compact .xpbar span, .compact .hpbar span { font-size: 11px; }
+.compact .hpbar { width: 150px; height: 18px; } .compact .vs { display: none; } .compact .hps { gap: 6px; }
+.compact .tools button { padding: 3px 9px; font-size: 14px; min-width: 34px; min-height: 30px; } .compact .ping { margin-right: 2px; }
+.compact .minimap { top: 44px; height: 18px; width: min(560px, 46%); }
+.compact .fps { top: 44px; }
+.compact .toast { bottom: 100px; }
+.compact .banner { top: 70px; font-size: 14px; padding: 6px 14px; }
+.compact .bottom { min-height: 0; gap: 6px; padding-top: 6px; padding-bottom: max(6px, env(safe-area-inset-bottom)); }
+.compact .panel { padding: 5px 6px; } .compact .panel h4 { display: none; }
+.compact .ubtns, .compact .tbtns, .compact .slots, .compact .queue { gap: 4px; }
+.compact .ubtn { width: 58px; height: 54px; padding: 2px; } .compact .tbtn { width: 58px; height: 46px; padding: 2px; }
+.compact .ubtn img, .compact .tbtn img { max-width: 44px; max-height: 34px; transform: scale(1.15); }
+.compact .ubtn .cost, .compact .tbtn .cost { font-size: 11px; right: 3px; bottom: 0; }
+.compact .qcell { width: 58px; height: 22px; } .compact .qcell img { max-height: 18px; }
+.compact .slots { margin-top: 3px; } .compact .slot { width: 43px; height: 28px; } .compact .slot img { max-height: 22px; max-width: 36px; } .compact .slot .lbl { font-size: 9px; }
+.compact .queue { margin-top: 3px; }
+.compact .panel.actions { gap: 6px; justify-content: space-around; min-width: 150px; }
+.compact .special { width: 68px; height: 68px; } .compact .special img { width: 38px; height: 38px; } .compact .special em { font-size: 20px; }
+.compact .evolve { width: 96px; height: 58px; font-size: 14px; } .compact .evolve small { font-size: 10px; }
+.compact .card { padding: 14px 20px; min-width: 260px; gap: 8px; } .compact .card.result h1 { font-size: 34px; } .compact .card td, .compact .card th { padding: 2px 8px; font-size: 12px; }
+.compact .debug { top: 66px; }
+
+/* ---------- menus on short screens */
+.menu-bg { align-items: flex-start; }
+.menu-card { margin: auto; }
+@media (max-height: 560px) {
+  .menu-bg { padding: 10px; }
+  .menu-card { padding: 12px 16px; gap: 7px; }
+  .logo { font-size: 28px; letter-spacing: 2px; } .logo span { font-size: 24px; }
+  .menu-card .sub { font-size: 13px; } h2 { font-size: 20px; }
+  button { padding: 7px 14px; } button.big { font-size: 16px; padding: 9px 14px; }
+  .code { font-size: 30px; padding: 6px 0 6px 8px; } .codein { font-size: 28px; padding: 5px; }
+  .howto { font-size: 12.5px; } .keys { display: none; }
+  .credit { display: none; }
+}
