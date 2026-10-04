@@ -10,7 +10,7 @@
   --dim: #98a0c8;
 }
 * { box-sizing: border-box; }
-html, body { margin: 0; height: 100%; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; background: var(--bg); color: var(--ink); overflow: hidden; font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; user-select: none; }
+html, body { margin: 0; height: 100%; overscroll-behavior: none; -webkit-tap-highlight-color: transparent; -webkit-touch-callout: none; background: var(--bg); color: var(--ink); overflow: hidden; font-family: 'Trebuchet MS', 'Segoe UI', system-ui, sans-serif; -webkit-user-select: none; user-select: none; }
 .hidden { display: none !important; }
 #game { position: fixed; inset: 0; }
 #game canvas { image-rendering: pixelated; display: block; touch-action: none; }
@@ -192,3 +192,6 @@ code { background: #0b0d18; padding: 1px 5px; border-radius: 4px; }
   .howto { font-size: 12.5px; } .keys { display: none; }
   .credit { display: none; }
 }
+
+/* Text fields must stay editable: Safari/WebKit needs the -webkit- prefix, otherwise `user-select: none` on the page blocks typing. */
+input, textarea, .code { -webkit-user-select: text !important; user-select: text !important; -webkit-touch-callout: default; }

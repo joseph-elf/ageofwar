@@ -93,7 +93,7 @@ export class Menu {
 
   private join(): void {
     this.render(`<h2>Join game</h2><p class="sub">Enter the 6-character room code:</p>
-      <input id="codein" class="codein" maxlength="6" autocomplete="off" spellcheck="false" placeholder="ABC123"><button id="go" class="primary big">Connect</button>
+      <input id="codein" class="codein" maxlength="6" autocomplete="off" autocapitalize="characters" autocorrect="off" spellcheck="false" inputmode="text" enterkeyhint="go" placeholder="ABC123"><button id="go" class="primary big">Connect</button>
       <div id="status" class="status info"></div><button id="back">Back</button>`);
     const input = this.root.querySelector('#codein') as HTMLInputElement;
     input.focus();
@@ -104,7 +104,9 @@ export class Menu {
       (this.root.querySelector('#go') as HTMLButtonElement).disabled = true;
       this.lobby = this.h.join(input.value, this.lobbyUi());
     };
-    input.onkeydown = (e) => e.key === 'Enter' && go();
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') go(); // (never return false from a key handler: that cancels the keystroke)
+    });
     this.on('#go', go);
     this.on('#back', () => this.show('multi'));
   }
