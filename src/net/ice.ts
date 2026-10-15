@@ -1,8 +1,6 @@
 import { settings } from '../game/settings';
 
 const STUN: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:stun.cloudflare.com:3478' }];
-/** PeerJS' free public relay: best-effort last resort, used when nothing better is configured. */
-const PEERJS_TURN: RTCIceServer = { urls: ['turn:eu-0.turn.peerjs.com:3478', 'turn:us-0.turn.peerjs.com:3478'], username: 'peerjs', credential: 'peerjsp' };
 
 let cached: { servers: RTCIceServer[]; until: number } | null = null;
 
@@ -27,12 +25,10 @@ async function fetchRelays(): Promise<RTCIceServer[]> {
 
 const isTurn = (s: RTCIceServer) => (Array.isArray(s.urls) ? s.urls : [s.urls]).some((u) => /^turns?:/.test(u));
 
-/** STUN + every relay we can get: deploy-provided, then manual Settings, then PeerJS' public one as a fallback. */
+/** STUN + any TURN relay we can get: deploy-provided (optional), then manual Settings. Without one, lobby.ts falls back to relay.ts. */
 export async function iceServers(): Promise<{ servers: RTCIceServer[]; relay: boolean }> {
   const servers = [...STUN, ...(await fetchRelays())];
   const manual = settings.turnUrls.split(',').map((u) => u.trim()).filter(Boolean);
   if (manual.length) servers.push({ urls: manual, username: settings.turnUser, credential: settings.turnPass });
-  const relay = servers.some(isTurn);
-  servers.push(PEERJS_TURN);
-  return { servers, relay };
+  return { servers, relay: servers.some(isTurn) };
 }

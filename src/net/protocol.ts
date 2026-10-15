@@ -22,6 +22,8 @@ export type Msg =
   | { t: 'bye' };
 
 export interface Transport {
+  /** 'relay' when the connection goes through the MQTT relay instead of WebRTC. */
+  readonly kind?: 'relay';
   send(m: Msg): void;
   close(): void;
   onMessage: (m: Msg) => void;

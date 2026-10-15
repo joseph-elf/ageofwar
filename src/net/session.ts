@@ -36,8 +36,9 @@ export function joinGame(code: string, ui: LobbyUi, start: (c: GameController) =
   let ctl: GuestController | undefined;
   const room = joinRoom(code, {
     onError: (msg) => (started && ctl ? ctl.connectionLost() : ui.status(msg, 'error')),
+    onStatus: (msg) => !started && ui.status(msg),
     onOpen: (t) => {
-      ui.status('Connected — checking game version…');
+      ui.status(t.kind === 'relay' ? 'Connected through the relay — checking game version…' : 'Connected — checking game version…');
       const session = new GuestSession(t, {
         onWelcome: () => {
           started = true;

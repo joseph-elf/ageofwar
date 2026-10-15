@@ -44,20 +44,19 @@ Multiplayer needs a **secure context** for WebRTC in most browsers when not on `
 The host plays on the left, the guest sees the same battle mirrored so their base is on the left too. Top-right shows the ping.
 A hosted match keeps simulating when its tab is in the background (the host timer runs in a Web Worker).
 
-**Different networks / mobile data:** mobile carriers (and strict firewalls) block direct peer-to-peer connections, so the game
-needs a **TURN relay**. On Vercel this is automatic: the serverless function [`api/ice.ts`](api/ice.ts) (`GET /api/ice`) hands
-out short-lived relay credentials, and the secrets never reach the browser. Set **one** of these in
-Vercel → Project → Settings → Environment Variables, then redeploy:
+**Different networks / mobile data:** mobile carriers (and strict firewalls) block direct peer-to-peer connections. This works
+with no setup and no account: the guest first tries a direct WebRTC connection; if that hasn't opened after 5 s (or fails), it
+also tries the **relay** ([`src/net/relay.ts`](src/net/relay.ts)), and whichever opens first is used. The relay sends the game's
+messages through free public MQTT brokers (test.mosquitto.org, broker.hivemq.com, broker.emqx.io) over secure WebSockets, which
+every network allows. The host listens on all of them, and the guest uses whichever answers first. Traffic is compressed and
+encrypted (AES-GCM) with a key derived from the room code, and the topic name is a hash of the code. The brokers and other users
+can see that traffic exists, but can't read or forge it. The lobby says "Connected through the relay" when it is used.
+A relayed match uses ~10 snapshots/s (about 1 KB each once compressed) and adds a little latency.
 
-| Provider | Variables |
-|---|---|
-| [Cloudflare TURN](https://dash.cloudflare.com/?to=/:account/calls) (1000 GB/month free, recommended) | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` |
-| [Metered.ca](https://www.metered.ca/stun-turn) | `METERED_DOMAIN` (e.g. `myapp.metered.live`), `METERED_API_KEY` |
-| Your own TURN server (e.g. [coturn](https://github.com/coturn/coturn)) | `TURN_URLS` (comma-separated), `TURN_USER`, `TURN_PASS` |
-
-Check it works by opening `https://<your-site>/api/ice`: the list should contain `turn:` URLs. If nothing is configured, the game
-falls back to PeerJS's free public relay, which is best-effort only. Players can also enter a relay manually under
-Settings → *TURN relay*. The relay carries only the game's small data stream.
+Optional, for a faster relayed connection: a TURN server. Vercel deployments can serve TURN credentials from
+[`api/ice.ts`](api/ice.ts) if you set `CF_TURN_KEY_ID` + `CF_TURN_API_TOKEN` (Cloudflare), `METERED_DOMAIN` + `METERED_API_KEY`
+(Metered.ca) or `TURN_URLS` + `TURN_USER` + `TURN_PASS` as environment variables. Players can also enter one under
+Settings → *TURN relay*.
 
 **Offline / no internet?** Run your own signaling server and point both clients at it:
 
