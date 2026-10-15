@@ -44,10 +44,20 @@ Multiplayer needs a **secure context** for WebRTC in most browsers when not on `
 The host plays on the left, the guest sees the same battle mirrored so their base is on the left too. Top-right shows the ping.
 A hosted match keeps simulating when its tab is in the background (the host timer runs in a Web Worker).
 
-**Different networks / mobile data:** direct peer-to-peer can't be established through some networks (most mobile carriers, strict
-firewalls). Add a **TURN relay**: Settings → *TURN relay*, or set `VITE_TURN_URLS`, `VITE_TURN_USER`, `VITE_TURN_PASS` before building
-(see `.env.example`). Providers: Metered.ca / Cloudflare Calls (free tiers, sign-up needed), Twilio, or self-hosted
-[coturn](https://github.com/coturn/coturn). The relay carries only the game's small data stream.
+**Different networks / mobile data:** mobile carriers (and strict firewalls) block direct peer-to-peer connections, so the game
+needs a **TURN relay**. On Vercel this is automatic: the serverless function [`api/ice.ts`](api/ice.ts) (`GET /api/ice`) hands
+out short-lived relay credentials, and the secrets never reach the browser. Set **one** of these in
+Vercel → Project → Settings → Environment Variables, then redeploy:
+
+| Provider | Variables |
+|---|---|
+| [Cloudflare TURN](https://dash.cloudflare.com/?to=/:account/calls) (1000 GB/month free, recommended) | `CF_TURN_KEY_ID`, `CF_TURN_API_TOKEN` |
+| [Metered.ca](https://www.metered.ca/stun-turn) | `METERED_DOMAIN` (e.g. `myapp.metered.live`), `METERED_API_KEY` |
+| Your own TURN server (e.g. [coturn](https://github.com/coturn/coturn)) | `TURN_URLS` (comma-separated), `TURN_USER`, `TURN_PASS` |
+
+Check it works by opening `https://<your-site>/api/ice`: the list should contain `turn:` URLs. If nothing is configured, the game
+falls back to PeerJS's free public relay, which is best-effort only. Players can also enter a relay manually under
+Settings → *TURN relay*. The relay carries only the game's small data stream.
 
 **Offline / no internet?** Run your own signaling server and point both clients at it:
 

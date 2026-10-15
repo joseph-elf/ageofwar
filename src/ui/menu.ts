@@ -144,7 +144,7 @@ export class Menu {
       <label>Port <input id="pp" type="number" value="${s.peerPort}"></label>
       <label>Path <input id="pa" type="text" value="${s.peerPath}"></label>
       <label class="chk"><input id="ps" type="checkbox" ${s.peerSecure ? 'checked' : ''}> Secure (https / wss)</label>
-      <h3>TURN relay (mobile data / strict networks)</h3><p class="sub small">Needed when a player's network blocks direct connections (most mobile carriers). Comma-separated URLs, e.g. <code>turn:example.com:3478, turns:example.com:443?transport=tcp</code>.</p>
+      <h3>TURN relay (mobile data / strict networks)</h3><p class="sub small">Optional: the deployed site provides a relay automatically. Fill this only to use your own, e.g. <code>turn:example.com:3478, turns:example.com:443?transport=tcp</code>.</p>
       <label>URLs <input id="tu" type="text" value="${s.turnUrls}" placeholder="turn:host:3478"></label>
       <label>User <input id="tn" type="text" value="${s.turnUser}" autocomplete="off"></label>
       <label>Password <input id="tp" type="text" value="${s.turnPass}" autocomplete="off"></label></div>
