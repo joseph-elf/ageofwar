@@ -12,6 +12,7 @@ const THROTTLE: Partial<Record<Sfx, number>> = { melee: 70, hit: 60, death: 90, 
 class AudioEngine {
   private ctx?: AudioContext;
   private master?: GainNode;
+  private music?: GainNode;
   private noise?: AudioBuffer;
   private last = new Map<Sfx, number>();
 
@@ -30,6 +31,8 @@ class AudioEngine {
       }
       this.master = this.ctx.createGain();
       this.master.connect(this.ctx.destination);
+      this.music = this.ctx.createGain();
+      this.music.connect(this.ctx.destination);
       const len = this.ctx.sampleRate;
       this.noise = this.ctx.createBuffer(1, len, this.ctx.sampleRate);
       const d = this.noise.getChannelData(0);
@@ -41,6 +44,18 @@ class AudioEngine {
 
   private applyVolume(): void {
     if (this.master) this.master.gain.value = settings.muted ? 0 : settings.volume * 0.5;
+    if (this.music) this.music.gain.value = settings.muted ? 0 : settings.musicVolume * 0.75;
+  }
+
+  /** Shared context / music output / white-noise buffer for the music sequencer (undefined until the first user gesture). */
+  get context(): AudioContext | undefined {
+    return this.ctx?.state === 'running' ? this.ctx : undefined;
+  }
+  get musicOut(): GainNode | undefined {
+    return this.music;
+  }
+  get noiseBuffer(): AudioBuffer | undefined {
+    return this.noise;
   }
 
   private tone(f0: number, f1: number, dur: number, type: OscillatorType, vol: number, delay = 0): void {

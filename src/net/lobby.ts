@@ -10,7 +10,10 @@ export const randomCode = (): string => Array.from({ length: 6 }, () => ALPHABET
 export function peerOptions(): PeerOptions {
   const o: PeerOptions = { debug: 1 };
   if (settings.peerHost) Object.assign(o, { host: settings.peerHost, port: settings.peerPort, path: settings.peerPath, secure: settings.peerSecure });
-  o.config = { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }] };
+  const iceServers: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }, { urls: 'stun:global.stun.twilio.com:3478' }];
+  const turn = settings.turnUrls.split(',').map((u) => u.trim()).filter(Boolean);
+  if (turn.length) iceServers.push({ urls: turn, username: settings.turnUser, credential: settings.turnPass });
+  o.config = { iceServers };
   return o;
 }
 
@@ -86,7 +89,7 @@ export function joinRoom(code: string, cb: { onOpen(t: Transport): void; onError
   peer.on('open', () => {
     connect().then(
       (t) => !closed && cb.onOpen(t),
-      () => !closed && cb.onError('Could not reach that room. Check the code, and that the host is still waiting.'),
+      () => !closed && cb.onError('Could not connect. Check the code and that the host is still waiting. If you are on mobile data or a strict network, a TURN relay server is needed (Settings → TURN relay).'),
     );
   });
   peer.on('error', (err) => !closed && cb.onError(describe(err)));

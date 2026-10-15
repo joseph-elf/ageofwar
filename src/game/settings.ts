@@ -1,5 +1,6 @@
 export interface Settings {
-  volume: number; // 0..1
+  volume: number; // 0..1 (sound effects)
+  musicVolume: number; // 0..1
   muted: boolean;
   showFps: boolean;
   /** PeerJS signaling server. Empty host => PeerJS' free public cloud server. */
@@ -7,17 +8,25 @@ export interface Settings {
   peerPort: number;
   peerPath: string;
   peerSecure: boolean;
+  /** Optional TURN relay (needed when a player is on mobile data / a strict firewall). Comma-separated urls, e.g. turn:host:3478,turns:host:443?transport=tcp */
+  turnUrls: string;
+  turnUser: string;
+  turnPass: string;
 }
 
 const env = import.meta.env as Record<string, string | undefined>;
 const DEFAULTS: Settings = {
   volume: 0.6,
+  musicVolume: 0.5,
   muted: false,
   showFps: false,
   peerHost: env.VITE_PEER_HOST ?? '',
   peerPort: Number(env.VITE_PEER_PORT ?? 443),
   peerPath: env.VITE_PEER_PATH ?? '/',
   peerSecure: (env.VITE_PEER_SECURE ?? 'true') !== 'false',
+  turnUrls: env.VITE_TURN_URLS ?? '',
+  turnUser: env.VITE_TURN_USER ?? '',
+  turnPass: env.VITE_TURN_PASS ?? '',
 };
 const KEY = 'ages-of-war-ii.settings';
 

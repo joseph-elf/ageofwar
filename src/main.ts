@@ -7,6 +7,7 @@ import { GameScene, type GameSceneData } from './game/scenes/GameScene';
 import type { GameController } from './game/controller';
 import { Menu, type LobbyHandle, type LobbyUi } from './ui/menu';
 import { sfx } from './game/audio';
+import { music } from './game/music';
 
 const game = new Phaser.Game({
   type: Phaser.AUTO,
@@ -42,7 +43,7 @@ function showMenu(screen: Parameters<Menu['show']>[0] = 'main'): void {
 }
 
 function startMatch(controller: GameController, rematch?: () => void): void {
-  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__aow = { game, controller };
+  if (import.meta.env.DEV) (window as unknown as Record<string, unknown>).__aow = { game, controller, sfx };
   menu.hide();
   gameEl.classList.remove('hidden');
   const data: GameSceneData = { controller, onExit: () => showMenu(controller.online ? 'multi' : 'main'), onRematch: rematch };
@@ -83,6 +84,10 @@ function joinOnline(code: string, ui: LobbyUi): LobbyHandle {
   return { cancel: () => ((cancelled = true), handle?.cancel()) };
 }
 
-game.events.once('booted', () => showMenu('main'));
+game.events.once('booted', () => {
+  showMenu('main');
+  // Soundtrack starts with the first click/tap (browser autoplay rules) and follows the local player's age.
+  music.play(() => (inMatch && current ? current.state.players[current.me].age : 1));
+});
 gameEl.classList.add('hidden');
 void sfx;

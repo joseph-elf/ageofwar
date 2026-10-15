@@ -135,26 +135,35 @@ export class Menu {
     const s = settings;
     this.render(
       `<h2>Settings</h2><div class="form">
-      <label>Volume <input id="vol" type="range" min="0" max="100" value="${Math.round(s.volume * 100)}"></label>
+      <label>Sound effects <input id="vol" type="range" min="0" max="100" value="${Math.round(s.volume * 100)}"></label>
+      <label>Music <input id="mus" type="range" min="0" max="100" value="${Math.round(s.musicVolume * 100)}"></label>
       <label class="chk"><input id="mute" type="checkbox" ${s.muted ? 'checked' : ''}> Mute all sound</label>
       <label class="chk"><input id="fps" type="checkbox" ${s.showFps ? 'checked' : ''}> Show FPS</label>
       <h3>Multiplayer signaling server</h3><p class="sub small">Leave host empty to use PeerJS' free public server. Self-host with <code>peerjs --port 9000</code>.</p>
       <label>Host <input id="ph" type="text" value="${s.peerHost}" placeholder="(default: 0.peerjs.com)"></label>
       <label>Port <input id="pp" type="number" value="${s.peerPort}"></label>
       <label>Path <input id="pa" type="text" value="${s.peerPath}"></label>
-      <label class="chk"><input id="ps" type="checkbox" ${s.peerSecure ? 'checked' : ''}> Secure (https / wss)</label></div>
+      <label class="chk"><input id="ps" type="checkbox" ${s.peerSecure ? 'checked' : ''}> Secure (https / wss)</label>
+      <h3>TURN relay (mobile data / strict networks)</h3><p class="sub small">Needed when a player's network blocks direct connections (most mobile carriers). Comma-separated URLs, e.g. <code>turn:example.com:3478, turns:example.com:443?transport=tcp</code>.</p>
+      <label>URLs <input id="tu" type="text" value="${s.turnUrls}" placeholder="turn:host:3478"></label>
+      <label>User <input id="tn" type="text" value="${s.turnUser}" autocomplete="off"></label>
+      <label>Password <input id="tp" type="text" value="${s.turnPass}" autocomplete="off"></label></div>
       <button id="back" class="primary">Done</button>`,
       true,
     );
     const q = <T extends HTMLInputElement>(id: string) => this.root.querySelector(id) as T;
     const apply = () => {
       s.volume = Number(q('#vol').value) / 100;
+      s.musicVolume = Number(q('#mus').value) / 100;
       s.muted = q('#mute').checked;
       s.showFps = q('#fps').checked;
       s.peerHost = q('#ph').value.trim();
       s.peerPort = Number(q('#pp').value) || 443;
       s.peerPath = q('#pa').value.trim() || '/';
       s.peerSecure = q('#ps').checked;
+      s.turnUrls = q('#tu').value.trim();
+      s.turnUser = q('#tn').value.trim();
+      s.turnPass = q('#tp').value.trim();
       saveSettings();
     };
     this.root.querySelectorAll('input').forEach((i) => (i.oninput = i.onchange = apply));

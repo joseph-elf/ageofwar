@@ -4,8 +4,13 @@ A browser lane-battle game: two bases at opposite ends of one lane, train units,
 (Stone → Medieval → Renaissance → Modern → Future) and destroy the enemy base. Single player vs AI (Easy / Normal / Hard) and
 peer-to-peer online 1v1.
 
-All names, sprites and sounds are original: sprites are drawn programmatically at boot (pixel art on offscreen canvases, scaled with
-nearest-neighbour) and every sound is synthesised with the Web Audio API. There are no asset files.
+All names, sprites, sounds and music are original: sprites are drawn programmatically at boot (pixel art on offscreen canvases, scaled with
+nearest-neighbour), and every sound effect and the soundtrack are synthesised with the Web Audio API. There are no asset files.
+
+**Music** (`src/game/music.ts`): an original heroic march in D major (152 BPM, half-time feel) with a quiet intro that builds into
+brass and drums. Its arrangement follows your age: horns + tribal toms (Stone), brass + timpani (Medieval), brass + harpsichord
+(Renaissance), brass + military snare (Modern), synth lead + arpeggiator + electronic drums (Future). Music volume is in Settings;
+`M` mutes everything.
 
 **Stack:** TypeScript · Vite · Phaser 3 · PeerJS (WebRTC) · Vitest. No backend; it deploys as a static site.
 
@@ -38,6 +43,11 @@ Multiplayer needs a **secure context** for WebRTC in most browsers when not on `
 
 The host plays on the left, the guest sees the same battle mirrored so their base is on the left too. Top-right shows the ping.
 A hosted match keeps simulating when its tab is in the background (the host timer runs in a Web Worker).
+
+**Different networks / mobile data:** direct peer-to-peer can't be established through some networks (most mobile carriers, strict
+firewalls). Add a **TURN relay**: Settings → *TURN relay*, or set `VITE_TURN_URLS`, `VITE_TURN_USER`, `VITE_TURN_PASS` before building
+(see `.env.example`). Providers: Metered.ca / Cloudflare Calls (free tiers, sign-up needed), Twilio, or self-hosted
+[coturn](https://github.com/coturn/coturn). The relay carries only the game's small data stream.
 
 **Offline / no internet?** Run your own signaling server and point both clients at it:
 
