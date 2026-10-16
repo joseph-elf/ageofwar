@@ -1,8 +1,8 @@
 import { AGES } from '../data/ages';
-import { CHARGE_BONUS, CRIT_CHANCE, CRIT_MULT, DAMAGE_VARIANCE, LANE_LENGTH, LAST_STAND_HP, OVERTIME_AFTER_SEC, OVERTIME_BASE_DAMAGE_MAX, OVERTIME_RAMP_SEC, OVERTIME_UNIT_DAMAGE_MAX, OVERTIME_TURRET_MIN, PASSIVE_GOLD, SLOT_HEIGHTS, SPECIAL_ACCURACY, SPECIAL_FALLOFF, SPECIAL_SCATTER, SPECIAL_VARIANCE, SPAWN_CLEARANCE, TICK_RATE, XP_PER_DAMAGE, DEFENDER_XP_MULT, sec } from '../data/config';
+import { CATCHUP_PER_AGE, CHARGE_BONUS, CRIT_CHANCE, CRIT_MULT, DAMAGE_VARIANCE, DEFENDER_GOLD_MULT, LANE_LENGTH, LAST_STAND_HP, MINE_INCOME, OVERTIME_AFTER_SEC, OVERTIME_BASE_DAMAGE_MAX, OVERTIME_RAMP_SEC, OVERTIME_UNIT_DAMAGE_MAX, OVERTIME_TURRET_MIN, PASSIVE_GOLD, SLOT_HEIGHTS, SLOW_ATTACK_SHARE, SPECIAL_ACCURACY, SPECIAL_FALLOFF, SPECIAL_SCATTER, SPECIAL_VARIANCE, SPAWN_CLEARANCE, SUDDEN_DEATH_AFTER_SEC, SUDDEN_DEATH_DECAY, TICK_RATE, TURRET_AGE_UPGRADE, XP_PER_DAMAGE, DEFENDER_XP_MULT, sec } from '../data/config';
 import { SPECIALS } from '../data/specials';
 import { TURRETS } from '../data/turrets';
-import { UNITS } from '../data/units';
+import { UNITS, type Role } from '../data/units';
 import { nextRandom } from './rng';
 import { baseFront, dirOf, enemyOf } from './state';
 import type { GameState, Side, SimEvent, Unit } from './types';
@@ -21,6 +21,11 @@ interface Attack {
 
 /** 0..1: how far into overtime the match is (anti-stalemate). */
 export const overtime = (s: GameState): number => Math.min(1, Math.max(0, (s.tick / TICK_RATE - OVERTIME_AFTER_SEC) / OVERTIME_RAMP_SEC));
+
+/** Catch-up multiplier on XP and income for a player who is behind the opponent in age. */
+export const catchup = (s: GameState, side: Side): number => 1 + CATCHUP_PER_AGE * Math.max(0, s.players[enemyOf(side)].age - s.players[side].age);
+
+const bonusVs = (bonus: Partial<Record<Role, number>> | undefined, target: Unit): number => bonus?.[UNITS[target.def].role] ?? 1;
 
 /** Rolls a hit: +-DAMAGE_VARIANCE spread and a chance to crit. */
 function roll(s: GameState, base: number): { dmg: number; crit: boolean } {
@@ -49,7 +54,8 @@ export function step(s: GameState): void {
 
   const [a, b] = s.players;
   if (a.baseHp <= 0 || b.baseHp <= 0) {
-    s.winner = a.baseHp > b.baseHp ? 0 : 1;
+    // Both can fall on the same tick (sudden death): more HP left wins, then more damage dealt.
+    s.winner = a.baseHp !== b.baseHp ? (a.baseHp > b.baseHp ? 0 : 1) : a.stats.damage >= b.stats.damage ? 0 : 1;
     s.events.push({ k: 'win', winner: s.winner });
   }
 }
@@ -63,14 +69,17 @@ export function forfeit(s: GameState, winner: Side, reason: string): void {
 }
 
 function incomePhase(s: GameState): void {
-  for (const p of s.players) {
-    p.goldFrac += (PASSIVE_GOLD[p.age] * p.incomeMult) / TICK_RATE;
+  const decay = s.tick > SUDDEN_DEATH_AFTER_SEC * TICK_RATE;
+  for (const side of [0, 1] as Side[]) {
+    const p = s.players[side];
+    p.goldFrac += (PASSIVE_GOLD[p.age] * p.incomeMult * (1 + p.econ * MINE_INCOME) * catchup(s, side)) / TICK_RATE;
     if (p.goldFrac >= 1) {
       const whole = Math.floor(p.goldFrac);
       p.gold += whole;
       p.goldFrac -= whole;
     }
     if (p.specialCd > 0) p.specialCd--;
+    if (decay) p.baseHp -= (p.baseMaxHp * SUDDEN_DEATH_DECAY) / TICK_RATE;
   }
 }
 
@@ -100,7 +109,10 @@ function unitPhase(s: GameState): void {
     const def = UNITS[u.def];
     const dir = dirOf(u.owner);
     const charging = u.mode === 'walk' && !def.proj;
-    if (u.cd > 0) u.cd--;
+    const slowF = u.slow ? (u.slowF ?? 1) : 1;
+    if (u.slow && --u.slow <= 0) u.slow = u.slowF = undefined;
+    if (u.cd > 0) u.cd -= 1 - SLOW_ATTACK_SHARE * (1 - slowF);
+    if (def.heal) healPhase(s, u, alive);
 
     let nearestEnemy: Unit | null = null;
     let dE = Infinity;
@@ -131,7 +143,7 @@ function unitPhase(s: GameState): void {
       u.mode = 'fight';
       if (u.cd <= 0) attacks.push({ u, targetId: -1, charge: charging });
     } else {
-      let move = def.speed / TICK_RATE;
+      let move = (def.speed * slowF) / TICK_RATE;
       if (dA < Infinity) move = Math.min(move, dA - ((def.width + allyW) / 2) * SPACING);
       if (move > 0.05) {
         u.x += move * dir;
@@ -146,26 +158,51 @@ function unitPhase(s: GameState): void {
   for (const { u, targetId, charge } of attacks) {
     const def = UNITS[u.def];
     const hit = roll(s, def.damage * s.players[u.owner].power * (charge ? CHARGE_BONUS : 1) * (1 + (OVERTIME_UNIT_DAMAGE_MAX - 1) * overtime(s)));
+    const target = targetId >= 0 ? s.units.find((o) => o.id === targetId) : undefined;
     u.cd = sec(def.attackInterval);
     u.lastAtk = s.tick;
     if (def.proj) {
-      const target = targetId >= 0 ? s.units.find((o) => o.id === targetId) : undefined;
       const tx = target ? target.x : baseFront(enemyOf(u.owner));
       s.projectiles.push({
         id: s.nextId++, owner: u.owner, kind: def.proj.kind, x: u.x, sx: u.x, sy: UNIT_SY, tx,
         dist0: Math.max(1, Math.abs(tx - u.x)), targetId, speed: def.proj.speed, damage: hit.dmg, splash: def.proj.splash ?? 0, crit: hit.crit,
+        bonus: def.bonus, baseMult: def.baseMult,
       });
       s.events.push({ k: 'shot', x: u.x, kind: def.proj.kind, owner: u.owner });
     } else {
       s.events.push({ k: 'melee', x: u.x, owner: u.owner });
-      if (targetId >= 0) {
-        const target = s.units.find((o) => o.id === targetId);
-        if (target) damageUnit(s, target, hit.dmg, u.owner, hit.crit);
-      } else {
-        damageBase(s, enemyOf(u.owner), hit.dmg, u.owner);
-      }
+      if (target) damageUnit(s, target, hit.dmg * bonusVs(def.bonus, target), u.owner, hit.crit);
+      else if (targetId < 0) damageBase(s, enemyOf(u.owner), hit.dmg * (def.baseMult ?? 1), u.owner);
     }
   }
+}
+
+/** Support units: heal the most injured ally in range when the heal is off cooldown. */
+function healPhase(s: GameState, u: Unit, alive: Unit[]): void {
+  const heal = UNITS[u.def].heal!;
+  if (u.healCd && u.healCd > 0) {
+    u.healCd--;
+    return;
+  }
+  const power = s.players[u.owner].power;
+  let best: Unit | null = null;
+  let missing = 0;
+  for (const o of alive) {
+    if (o === u || o.owner !== u.owner || Math.abs(o.x - u.x) > heal.range) continue;
+    const m = UNITS[o.def].hp * power - o.hp;
+    if (m > missing) {
+      missing = m;
+      best = o;
+    }
+  }
+  if (!best) return;
+  const amount = Math.min(missing, heal.amount * power);
+  best.hp += amount;
+  u.healCd = sec(heal.interval);
+  u.lastHeal = s.tick;
+  const p = s.players[u.owner];
+  p.xp += amount * XP_PER_DAMAGE * p.xpMult * catchup(s, u.owner);
+  s.events.push({ k: 'heal', id: best.id, x: best.x, amount: Math.round(amount), owner: u.owner });
 }
 
 function turretPhase(s: GameState): void {
@@ -191,10 +228,12 @@ function turretPhase(s: GameState): void {
       if (!target) continue;
       t.cd = sec(def.fireInterval);
       t.lastAtk = s.tick;
-      const hit = roll(s, def.damage * (1 - (1 - OVERTIME_TURRET_MIN) * overtime(s)));
+      const veteran = 1 + TURRET_AGE_UPGRADE * Math.max(0, p.age - def.age);
+      const hit = roll(s, def.damage * veteran * (1 - (1 - OVERTIME_TURRET_MIN) * overtime(s)));
       s.projectiles.push({
         id: s.nextId++, owner: side, kind: def.proj.kind, x: bx, sx: bx, sy: turretHeight(slot), tx: target.x,
         dist0: Math.max(1, Math.abs(target.x - bx)), targetId: target.id, speed: def.proj.speed, damage: hit.dmg, splash: def.proj.splash ?? 0, crit: hit.crit,
+        bonus: def.bonus, slow: def.slow && { f: def.slow.factor, t: sec(def.slow.duration) },
       });
       s.events.push({ k: 'shot', x: bx, kind: def.proj.kind, owner: side });
     }
@@ -215,15 +254,23 @@ function projectilePhase(s: GameState): void {
     }
     pr.x = pr.tx;
     // Impact
+    const hitUnit = (o: Unit) => {
+      damageUnit(s, o, pr.damage * bonusVs(pr.bonus, o), pr.owner, pr.crit);
+      if (pr.slow && o.hp > 0) {
+        o.slow = Math.max(o.slow ?? 0, pr.slow.t);
+        o.slowF = Math.min(o.slowF ?? 1, pr.slow.f);
+      }
+    };
     if (pr.splash > 0) {
       for (const o of s.units) {
-        if (o.owner !== pr.owner && o.hp > 0 && Math.abs(o.x - pr.tx) <= pr.splash) damageUnit(s, o, pr.damage, pr.owner, pr.crit);
+        if (o.owner !== pr.owner && o.hp > 0 && Math.abs(o.x - pr.tx) <= pr.splash) hitUnit(o);
       }
-      if (pr.targetId === -1) damageBase(s, enemyOf(pr.owner), pr.damage, pr.owner);
+      if (pr.slow) s.events.push({ k: 'slowed', x: pr.tx, owner: pr.owner, radius: pr.splash });
+      if (pr.targetId === -1) damageBase(s, enemyOf(pr.owner), pr.damage * (pr.baseMult ?? 1), pr.owner);
     } else if (target) {
-      damageUnit(s, target, pr.damage, pr.owner, pr.crit);
+      hitUnit(target);
     } else if (pr.targetId === -1) {
-      damageBase(s, enemyOf(pr.owner), pr.damage, pr.owner);
+      damageBase(s, enemyOf(pr.owner), pr.damage * (pr.baseMult ?? 1), pr.owner);
     }
   }
   s.projectiles = keep;
@@ -274,8 +321,9 @@ function reapPhase(s: GameState): void {
     const k = u.killer ?? enemyOf(u.owner);
     const kp = s.players[k];
     const defending = (u.x < LANE_LENGTH / 2) === (k === 0);
-    const gold = Math.round(def.gold * kp.goldMult);
-    const xp = def.xp * (defending ? DEFENDER_XP_MULT : 1) * kp.xpMult;
+    const cu = catchup(s, k);
+    const gold = Math.round(def.gold * kp.goldMult * (defending ? DEFENDER_GOLD_MULT : 1) * cu);
+    const xp = def.xp * (defending ? DEFENDER_XP_MULT : 1) * kp.xpMult * cu;
     kp.gold += gold;
     kp.xp += xp;
     kp.stats.goldEarned += gold;
@@ -291,7 +339,7 @@ function damageUnit(s: GameState, target: Unit, dmg: number, attacker: Side, cri
   target.hp -= dmg;
   const ap = s.players[attacker];
   ap.stats.damage += dmg;
-  ap.xp += dmg * XP_PER_DAMAGE * ap.xpMult;
+  ap.xp += dmg * XP_PER_DAMAGE * ap.xpMult * catchup(s, attacker);
   s.events.push({ k: 'hit', id: target.id, x: target.x, dmg: Math.round(dmg), owner: target.owner, crit });
   if (target.hp <= 0) target.killer = attacker;
 }
@@ -307,7 +355,7 @@ function damageBase(s: GameState, victim: Side, dmgRaw: number, attacker: Side):
   }
   const ap = s.players[attacker];
   ap.stats.damage += dmg;
-  ap.xp += dmg * XP_PER_DAMAGE * ap.xpMult;
+  ap.xp += dmg * XP_PER_DAMAGE * ap.xpMult * catchup(s, attacker);
   s.events.push({ k: 'base_hit', owner: victim, dmg: Math.round(dmg) });
 }
 

@@ -1,0 +1,32 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+
+# Env files / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test / coverage output
+coverage
+
+# OS / editor junk
+.DS_Store
+.vscode/*
+!.vscode/extensions.json
+.idea
+
+# TypeScript incremental build info
+*.tsbuildinfo
+
+# Vite cache
+.vite
+
+# Third-party reference audio: never commit or deploy
+*.mp3

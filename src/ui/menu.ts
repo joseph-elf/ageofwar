@@ -1,3 +1,4 @@
+import type { Roster } from '../data/ages';
 import { DIFFICULTY, type Difficulty } from '../data/config';
 import { saveSettings, settings } from '../game/settings';
 import { sfx } from '../game/audio';
@@ -56,14 +57,32 @@ export class Menu {
 
   private single(): void {
     const descs: Record<Difficulty, string> = { easy: 'Slow to react, light army. Great for learning.', normal: 'A fair fight. Uses turrets and specials.', hard: 'Fast, greedy and well-supplied. Good luck.' };
-    this.render(`<h2>Choose difficulty</h2>${(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => `<button class="diff ${d}" data-d="${d}"><b>${DIFFICULTY[d].label}</b><small>${descs[d]}</small></button>`).join('')}<button id="back">Back</button>`);
+    this.render(`<h2>Choose difficulty</h2>${this.rosterPicker()}${(Object.keys(DIFFICULTY) as Difficulty[]).map((d) => `<button class="diff ${d}" data-d="${d}"><b>${DIFFICULTY[d].label}</b><small>${descs[d]}</small></button>`).join('')}<button id="back">Back</button>`);
+    this.bindRoster();
     this.root.querySelectorAll<HTMLElement>('.diff').forEach((b) => (b.onclick = () => this.h.single(b.dataset.d as Difficulty)));
     this.on('#back', () => this.show('main'));
   }
 
+  /** Classic / Extended unit roster toggle (remembered in settings, read when the match is created). */
+  private rosterPicker(): string {
+    const opt = (r: Roster, label: string, desc: string) => `<button class="roster-opt${settings.roster === r ? ' on' : ''}" data-roster="${r}"><b>${label}</b><small>${desc}</small></button>`;
+    return `<div class="roster"><span class="roster-lbl">Units</span>${opt('classic', 'Classic', 'The original units and turrets')}${opt('extended', 'Extended', 'Adds healers, siege, anti-armour units and slowing turrets')}</div>`;
+  }
+  private bindRoster(): void {
+    this.root.querySelectorAll<HTMLElement>('.roster-opt').forEach((b) => {
+      b.onclick = () => {
+        settings.roster = b.dataset.roster as Roster;
+        saveSettings();
+        this.root.querySelectorAll('.roster-opt').forEach((o) => o.classList.toggle('on', o === b));
+      };
+    });
+  }
+
   private multi(): void {
     this.render(`<h2>Multiplayer</h2><p class="sub">Peer-to-peer 1v1. One player creates a game and shares the 6-character code.</p>
+      ${this.rosterPicker()}<p class="sub small">The units choice applies to games you create; when joining, the host's choice is used.</p>
       <button id="create" class="primary big">Create game</button><button id="join" class="big">Join game</button><button id="back">Back</button>`);
+    this.bindRoster();
     this.on('#create', () => this.show('host'));
     this.on('#join', () => this.show('join'));
     this.on('#back', () => this.show('main'));
@@ -115,14 +134,16 @@ export class Menu {
     this.render(
       `<h2>How to play</h2><div class="howto">
       <p><b>Goal:</b> destroy the enemy base (right) before they destroy yours (left).</p>
-      <p><b>Gold</b> comes from killing enemy units. Spend it on <b>units</b> (they march automatically), <b>turrets</b> on your base, and extra <b>turret slots</b>.</p>
+      <p><b>Gold</b> trickles in over time and comes from killing enemy units. Spend it on <b>units</b> (they march automatically), <b>turrets</b> on your base, and extra <b>turret slots</b>.</p>
       <p><b>XP</b> comes from kills and damage. Spend it to <b>Evolve</b> into a new age: stronger units, turrets, base and special. Units already on the field stay.</p>
       <p><b>Special:</b> a long-cooldown attack that hits enemy units on the field (never the base). Best used on clumped enemies.</p>
       <p>Melee units queue up behind each other. Ranged units can shoot over allies. Fight near your own turrets and you earn bonus XP.</p>
+      <p><b>Counters:</b> pikemen beat cavalry, armour-piercing turrets and the Ion Disruptor shred heavies and the Colossus, rams smash bases. A <b>Gold Mine</b> (G) raises your income. Turrets get stronger every time you evolve. From 10:00 both bases crumble (sudden death).</p>
       <table class="keys">
-        <tr><td><kbd>1</kbd>–<kbd>4</kbd></td><td>Train unit</td><td><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd></td><td>Build turret</td></tr>
-        <tr><td><kbd>R</kbd></td><td>Buy turret slot</td><td><kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>4</kbd></td><td>Sell turret in slot</td></tr>
-        <tr><td><kbd>S</kbd></td><td>Special ability</td><td><kbd>V</kbd></td><td>Evolve</td></tr>
+        <tr><td><kbd>1</kbd>–<kbd>5</kbd></td><td>Train unit</td><td><kbd>Q</kbd> <kbd>W</kbd> <kbd>E</kbd> <kbd>R</kbd></td><td>Build turret</td></tr>
+        <tr><td><kbd>B</kbd></td><td>Buy turret slot</td><td><kbd>Shift</kbd>+<kbd>1</kbd>–<kbd>4</kbd></td><td>Sell turret in slot</td></tr>
+        <tr><td><kbd>G</kbd></td><td>Upgrade Gold Mine</td><td><kbd>S</kbd></td><td>Special ability</td></tr>
+        <tr><td><kbd>V</kbd></td><td>Evolve</td><td></td><td></td></tr>
         <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>Scroll (also mouse at edge, drag, minimap)</td><td><kbd>P</kbd> / <kbd>Esc</kbd></td><td>Pause / menu</td></tr>
         <tr><td><kbd>M</kbd></td><td>Mute</td><td><kbd>F3</kbd></td><td>Debug overlay</td></tr>
       </table></div><button id="back" class="primary">Back</button>`,

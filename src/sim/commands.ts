@@ -1,5 +1,5 @@
-import { AGES, LAST_AGE } from '../data/ages';
-import { MAX_TURRET_SLOTS, QUEUE_MAX, SELL_REFUND, TURRET_SLOT_COSTS, sec } from '../data/config';
+import { AGES, LAST_AGE, turretsOf, unitsOf } from '../data/ages';
+import { MAX_TURRET_SLOTS, MINE_COSTS, QUEUE_MAX, SELL_REFUND, TURRET_SLOT_COSTS, sec } from '../data/config';
 import { SPECIALS } from '../data/specials';
 import { TURRETS } from '../data/turrets';
 import { UNITS } from '../data/units';
@@ -11,6 +11,11 @@ const OK: CmdResult = { ok: true };
 /** Cost of the next turret slot, or null if all slots are owned. */
 export function nextSlotCost(slotCount: number): number | null {
   return slotCount >= MAX_TURRET_SLOTS ? null : TURRET_SLOT_COSTS[slotCount - 1];
+}
+
+/** Cost of the next Gold Mine level, or null at max level. */
+export function nextMineCost(level: number): number | null {
+  return level >= MINE_COSTS.length ? null : MINE_COSTS[level];
 }
 
 /**
@@ -26,7 +31,7 @@ export function applyCommand(s: GameState, side: Side, cmd: Command): CmdResult 
 
   switch (cmd.type) {
     case 'TRAIN_UNIT': {
-      if (typeof cmd.unit !== 'string' || !age.units.includes(cmd.unit)) return fail('unit not available');
+      if (typeof cmd.unit !== 'string' || !unitsOf(age, s.roster).includes(cmd.unit)) return fail('unit not available');
       const def = UNITS[cmd.unit];
       if (p.queue.length >= QUEUE_MAX) return fail('queue full');
       if (p.gold < def.cost) return fail('not enough gold');
@@ -42,7 +47,7 @@ export function applyCommand(s: GameState, side: Side, cmd: Command): CmdResult 
     case 'BUY_TURRET': {
       if (!Number.isInteger(cmd.slot) || cmd.slot < 0 || cmd.slot >= p.slotCount) return fail('invalid slot');
       if (p.turrets[cmd.slot]) return fail('slot occupied');
-      if (typeof cmd.turret !== 'string' || !age.turrets.includes(cmd.turret)) return fail('turret not available');
+      if (typeof cmd.turret !== 'string' || !turretsOf(age, s.roster).includes(cmd.turret)) return fail('turret not available');
       const def = TURRETS[cmd.turret];
       if (p.gold < def.cost) return fail('not enough gold');
       p.gold -= def.cost;
@@ -65,6 +70,15 @@ export function applyCommand(s: GameState, side: Side, cmd: Command): CmdResult 
       if (p.gold < cost) return fail('not enough gold');
       p.gold -= cost;
       p.slotCount++;
+      return OK;
+    }
+    case 'BUY_ECON': {
+      const cost = nextMineCost(p.econ);
+      if (cost === null) return fail('max mine');
+      if (p.gold < cost) return fail('not enough gold');
+      p.gold -= cost;
+      p.econ++;
+      s.events.push({ k: 'econ', owner: side, level: p.econ });
       return OK;
     }
     case 'USE_SPECIAL': {

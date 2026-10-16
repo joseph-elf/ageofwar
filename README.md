@@ -72,13 +72,41 @@ The same fields can be set at build time with `VITE_PEER_HOST`, `VITE_PEER_PORT`
 
 | Key | Action | Key | Action |
 |---|---|---|---|
-| `1`–`4` | Train unit | `Q` `W` `E` | Build turret (first free slot) |
-| `R` | Buy turret slot | `Shift`+`1`–`4` | Sell turret in that slot |
-| `S` | Special ability | `V` | Evolve |
+| `1`–`5` | Train unit | `Q` `W` `E` `R` | Build turret (first free slot; `R` = slowing turret, Extended roster) |
+| `B` | Buy turret slot | `Shift`+`1`–`4` | Sell turret in that slot |
+| `G` | Upgrade Gold Mine | `S` | Special ability |
+| `V` | Evolve | | |
 | `←` `→` / mouse at screen edge / drag / minimap | Scroll the lane | `P` / `Esc` | Pause (SP) / menu |
 | `M` | Mute | `F3` | Debug overlay |
 
 Hover any button for a tooltip with stats and its shortcut.
+
+## Rosters, counters and the anti-snowball economy
+
+When starting a game (Single Player difficulty screen, or the Multiplayer screen before **Create game**) pick the **Units** roster:
+
+* **Classic** – the original 3 units + 3 turrets per age (plus the Colossus in the Future Age).
+* **Extended** – adds one unit per age and a 4th, *slowing* turret per age:
+
+| Age | New unit | New turret (`R`) |
+|---|---|---|
+| Stone | **Shaman** – heals the most wounded ally nearby | **Tar Pot** – splash slow |
+| Medieval | **Battering Ram** – weak in fights, ×5 damage to bases | **Boiling Oil** – short range, splash slow |
+| Renaissance | **Grenadier** – splash bombs vs groups | **Chain-Shot Gun** – slow |
+| Modern | **Field Medic** – healer | **Gas Launcher** – wide slow |
+| Future | **Ion Disruptor** – ×2.5 vs heavies, ×3.5 vs the Colossus, weak vs infantry | **Stasis Projector** – strong slow |
+
+The host's choice applies to an online match (the roster travels in the game state). These rules apply to both rosters:
+
+* **Kill bounties never pay more than the unit cost** (`KILL_GOLD_MULT`), so winning a trade refunds you instead of making you
+  richer. Passive gold is higher to compensate, and kills on your own half pay a bit more (`DEFENDER_GOLD_MULT`).
+* **Catch-up:** for each age you are behind, your XP and income are ×1.35 (`CATCHUP_PER_AGE`).
+* **Gold Mine (`G`):** 4 levels, each +50% passive gold. Greedy economy vs army now – a rush can punish it.
+* **Counters:** units and turrets can deal bonus damage to roles (`bonus` in `units.ts` / `turrets.ts`): pikemen vs cavalry,
+  Ballista / Culverin / Autocannon / Rail Cannon vs armour. The Colossus deals half damage to bases and costs more.
+* **Turrets are a lasting investment:** stronger overall, they gain +50% damage per age you are past them (`TURRET_AGE_UPGRADE`),
+  and sell back for 70%. Slots are cheaper.
+* **Sudden death:** from 10:00 both bases crumble; the one with more HP left wins, so every match ends.
 
 ## Phones & tablets
 
@@ -163,7 +191,7 @@ host  → guest  end {winner, reason}; either side: bye (left on purpose)
   killer's own half of the lane earns ×1.5 XP (`DEFENDER_XP_MULT`). Damage also earns a little XP (`XP_PER_DAMAGE`).
 * **Evolving consumes XP** ("evolving costs XP"). Base max HP rises and the HP already lost stays lost. Turrets you own stay.
 * **Passive gold trickle** (`PASSIVE_GOLD`) so nobody can soft-lock at 0 gold with no army.
-* **Keys:** the brief lists `E` for both turret and evolve, so evolve is `V`. Turret slot buying is `R`.
+* **Keys:** the brief lists `E` for both turret and evolve, so evolve is `V`. Turret slot buying is `B` (`R` is the 4th turret).
 * **One Colossus Titan at a time** per player (queued or alive) – it is an elite unit.
 * **Specials** pick random enemy units as targets (seeded RNG), hit with a short delay so the falling projectile can be drawn, and
   never damage the base.

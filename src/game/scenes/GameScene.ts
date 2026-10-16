@@ -6,7 +6,7 @@ import { UNITS } from '../../data/units';
 import { baseFront } from '../../sim/state';
 import { UNIT_TY } from '../../sim/step';
 import type { Projectile, SimEvent, Unit } from '../../sim/types';
-import { BASE_H, BASE_SCALE, BASE_W } from '../art/bases';
+import { BASE_H, BASE_SCALE, BASE_W, MINE_W } from '../art/bases';
 import { sfx, type Sfx } from '../audio';
 import type { GameController } from '../controller';
 import { Hud, type HudHost } from '../../ui/hud';
@@ -23,8 +23,11 @@ const FOOT_Y = GROUND_Y + 6;
 const SCALE = 2;
 const MINE = 0x4fd1ff;
 const THEIRS = 0xff5a5a;
-const SPLASHY = new Set(['shell', 'rocket', 'plasma', 'ball']);
-const ARCED = new Set(['rock', 'ball', 'shell', 'spear', 'arrow']);
+const SPLASHY = new Set(['shell', 'rocket', 'plasma', 'ball', 'grenade']);
+const ARCED = new Set(['rock', 'ball', 'shell', 'spear', 'arrow', 'tar', 'oil', 'grenade', 'gas', 'stasis']);
+const TRAIL: Record<string, number> = { rocket: 0xdddddd, plasma: 0xb47bff, gas: 0x8ae86a, stasis: 0x9a7bff };
+const IMPACT: Record<string, number> = { plasma: 0xb47bff, gas: 0x8ae86a, stasis: 0xb48cff, tar: 0x6a5a8a, oil: 0xffb02e, chain: 0xcfd6e0, ion: 0xffe066 };
+const SLOWED = 0x9fc8ff;
 const SPECIAL_INDEX: Record<string, number> = { meteors: 0, volley: 1, barrage: 2, airstrike: 3, laser: 4 };
 
 interface UnitView {
@@ -34,7 +37,7 @@ interface UnitView {
   x: number;
   phase: number;
   atkStart: number;
-  lastAtk: number;
+  lastAtk: number; // newest of attack / heal tick (drives the 'atk' animation)
   key: string;
   flash: number;
   hp: number;
@@ -53,6 +56,8 @@ export class GameScene extends Phaser.Scene implements HudHost {
   private units = new Map<number, UnitView>();
   private projs = new Map<number, { img: Phaser.GameObjects.Image; kind: string; x: number; y: number; owner: number; splash: number }>();
   private baseImgs: Phaser.GameObjects.Image[] = [];
+  private mineImgs: Phaser.GameObjects.Image[] = [];
+  private mineLv = [0, 0];
   private turretImgs: Phaser.GameObjects.Image[][] = [];
   private bars!: Phaser.GameObjects.Graphics;
   private sky!: Phaser.GameObjects.TileSprite;
@@ -81,6 +86,8 @@ export class GameScene extends Phaser.Scene implements HudHost {
     this.units = new Map();
     this.projs = new Map();
     this.baseImgs = [];
+    this.mineImgs = [];
+    this.mineLv = [0, 0];
     this.turretImgs = [];
     this.bgAge = -1;
     this.baseAges = [-1, -1];
@@ -95,6 +102,13 @@ export class GameScene extends Phaser.Scene implements HudHost {
   /** 0 = drawn on the left of the screen, 1 = right. */
   private vside(side: number): number {
     return this.mirror ? 1 - side : side;
+  }
+
+  /** Screen x of the centre of a side's gold mine (just outside the base's back edge). */
+  private mineX(side: 0 | 1): number {
+    const fx = this.wx(baseFront(side));
+    const off = BASE_W * BASE_SCALE + 2 + (MINE_W * SCALE) / 2;
+    return this.vside(side) === 0 ? fx - off : fx + off;
   }
 
   // ------------------------------------------------------------------ HudHost
@@ -134,6 +148,15 @@ export class GameScene extends Phaser.Scene implements HudHost {
         .setFlipX(v === 1)
         .setDepth(FOOT_Y - 30);
       this.baseImgs.push(base);
+      // gold mine: behind the base, out on the lane's outer edge
+      const mine = this.add
+        .image(this.mineX(side as 0 | 1), FOOT_Y + 2, 'mine:1')
+        .setOrigin(0.5, 1)
+        .setScale(SCALE)
+        .setFlipX(v === 1)
+        .setDepth(FOOT_Y - 34)
+        .setVisible(false);
+      this.mineImgs.push(mine);
       const row: Phaser.GameObjects.Image[] = [];
       for (let slot = 0; slot < SLOT_HEIGHTS.length; slot++) {
         const t = this.add
@@ -264,6 +287,12 @@ export class GameScene extends Phaser.Scene implements HudHost {
         this.baseAges[side] = p.age;
         this.baseImgs[side].setTexture(`base:${p.age}`);
       }
+      if (this.mineLv[side] !== p.econ) {
+        this.mineLv[side] = p.econ;
+        const mi = this.mineImgs[side];
+        mi.setVisible(p.econ > 0);
+        if (p.econ > 0) mi.setTexture(`mine:${Math.min(4, p.econ)}`);
+      }
       const ratio = p.baseHp / p.baseMaxHp;
       const dmg = ratio < 0.4 ? 0.55 + ratio : 1;
       const g = Math.round(255 * Math.min(1, dmg));
@@ -299,8 +328,9 @@ export class GameScene extends Phaser.Scene implements HudHost {
       if (!v) v = this.createUnitView(u);
       const tx = this.wx(u.x);
       v.x = Math.abs(tx - v.x) > 250 ? tx : v.x + (tx - v.x) * k;
-      if (u.lastAtk !== v.lastAtk) {
-        v.lastAtk = u.lastAtk;
+      const act = Math.max(u.lastAtk, u.lastHeal ?? -999);
+      if (act !== v.lastAtk) {
+        v.lastAtk = act;
         v.atkStart = time;
       }
       let anim: string;
@@ -324,6 +354,7 @@ export class GameScene extends Phaser.Scene implements HudHost {
       const dirScreen = (u.owner === 0 ? 1 : -1) * (this.mirror ? -1 : 1);
       v.sprite.setPosition(v.x, v.y).setFlipX(dirScreen < 0).setDepth(v.y);
       if (time < v.flash) v.sprite.setTintFill(0xffffff);
+      else if (u.slow && u.slow > 0) v.sprite.setTint(SLOWED);
       else v.sprite.clearTint();
     }
     for (const [id, v] of this.units) {
@@ -340,7 +371,7 @@ export class GameScene extends Phaser.Scene implements HudHost {
     const y = FOOT_Y + (u.id % 3) * 6;
     const sprite = this.add.image(x, y, key).setOrigin(0.5, 1).setScale(SCALE).setDepth(y);
     const v: UnitView = {
-      sprite, def: u.def, owner: u.owner, x, phase: u.id % 4, atkStart: -1e9, lastAtk: u.lastAtk, key, flash: 0, hp: u.hp, maxHp: Math.max(def.hp, u.hp),
+      sprite, def: u.def, owner: u.owner, x, phase: u.id % 4, atkStart: -1e9, lastAtk: Math.max(u.lastAtk, u.lastHeal ?? -999), key, flash: 0, hp: u.hp, maxHp: Math.max(def.hp, u.hp),
       dispH: sprite.height * SCALE, y,
     };
     this.units.set(u.id, v);
@@ -370,14 +401,14 @@ export class GameScene extends Phaser.Scene implements HudHost {
       v.x = pos.x;
       v.y = pos.y;
       v.img.setPosition(pos.x, pos.y).setRotation(pos.angle);
-      if ((p.kind === 'rocket' || p.kind === 'plasma') && Math.random() < 0.5) this.puff(pos.x, pos.y, p.kind === 'rocket' ? 0xdddddd : 0xb47bff, 0.5);
+      if (TRAIL[p.kind] !== undefined && Math.random() < 0.5) this.puff(pos.x, pos.y, TRAIL[p.kind], 0.5);
     }
     for (const [id, v] of this.projs) {
       if (seen.has(id)) continue;
       this.projs.delete(id);
       v.img.destroy();
-      if (SPLASHY.has(v.kind) || v.splash > 0) this.explode(v.x, v.y, Math.max(30, v.splash * 0.8), v.kind === 'plasma' ? 0xb47bff : 0xffa14a, false);
-      else this.sparks(v.x, v.y, 0xffe08a, 3);
+      if (SPLASHY.has(v.kind) || v.splash > 0) this.explode(v.x, v.y, Math.max(30, v.splash * 0.8), IMPACT[v.kind] ?? 0xffa14a, false);
+      else this.sparks(v.x, v.y, IMPACT[v.kind] ?? 0xffe08a, v.kind === 'tar' || v.kind === 'oil' ? 6 : 3);
     }
   }
 
@@ -417,6 +448,23 @@ export class GameScene extends Phaser.Scene implements HudHost {
       case 'melee':
         sfx.play('melee');
         break;
+      case 'heal': {
+        const v = this.units.get(e.id);
+        const x = v ? v.x : this.wx(e.x);
+        if (e.amount >= 1 && this.floaters < 8) this.floatText(x, FOOT_Y - (v ? v.dispH : 40) - 14, `+${Math.round(e.amount)}`, '#7dff9a', 14);
+        this.rise(x, v ? v.y - v.dispH * 0.5 : FOOT_Y - 24, 0x7dff9a, 4);
+        break;
+      }
+      case 'slowed':
+        this.slowFx(this.wx(e.x), e.radius);
+        break;
+      case 'econ': {
+        const x = this.mineX(e.owner);
+        this.coinBurst(x, FOOT_Y - 40, 8);
+        this.floatText(x, FOOT_Y - 90, `GOLD MINE ${e.level}`, '#ffd84a', 16, 1400);
+        if (mine(e.owner)) sfx.play('build');
+        break;
+      }
       case 'shot':
         sfx.play(this.shotSfx(e.kind));
         break;
@@ -475,9 +523,10 @@ export class GameScene extends Phaser.Scene implements HudHost {
   private shotSfx(kind: string): Sfx {
     switch (kind) {
       case 'rock': case 'spear': return 'shoot_rock';
+      case 'tar': case 'oil': case 'grenade': return 'shoot_rock';
       case 'arrow': case 'bolt': return 'shoot_bolt';
       case 'bullet': return 'shoot_gun';
-      case 'laser': case 'plasma': return 'shoot_laser';
+      case 'laser': case 'plasma': case 'stasis': case 'ion': return 'shoot_laser';
       default: return 'shoot_cannon';
     }
   }
@@ -566,6 +615,33 @@ export class GameScene extends Phaser.Scene implements HudHost {
   private starBurst(x: number, y: number): void {
     const s = this.add.image(x, y, 'fx:star').setScale(2).setDepth(9300);
     this.tweens.add({ targets: s, x: x + Phaser.Math.Between(-140, 140), y: y + Phaser.Math.Between(-140, 80), alpha: 0, duration: 900, onComplete: () => s.destroy() });
+  }
+
+  /** Little pixels drifting upwards (heal sparkles). */
+  private rise(x: number, y: number, color: number, n: number): void {
+    for (let i = 0; i < n; i++) {
+      const s = this.add.image(x + Phaser.Math.Between(-8, 8), y + Phaser.Math.Between(-6, 8), 'fx:spark').setTint(color).setDepth(9300).setScale(Phaser.Math.FloatBetween(0.5, 0.9));
+      this.tweens.add({ targets: s, y: s.y - Phaser.Math.Between(22, 38), alpha: 0, duration: Phaser.Math.Between(450, 700), onComplete: () => s.destroy() });
+    }
+  }
+
+  /** Flattened violet ground ring + frosty puff where enemies got slowed. */
+  private slowFx(x: number, radius: number): void {
+    const ring = this.add.image(x, FOOT_Y - 4, 'fx:ring').setTint(0x9a7bff).setAlpha(0.8).setScale(0.3, 0.1).setDepth(9100);
+    this.tweens.add({ targets: ring, scaleX: radius / 22, scaleY: (radius / 22) * 0.3, alpha: 0, duration: 450, onComplete: () => ring.destroy() });
+    this.puff(x, FOOT_Y - 6, SLOWED, Math.max(0.6, radius / 60));
+    this.sparks(x, FOOT_Y - 10, 0x7ae8ff, 4);
+  }
+
+  private coinBurst(x: number, y: number, n: number): void {
+    this.sparks(x, y, 0xffd84a, 6);
+    for (let i = 0; i < n; i++) {
+      const c = this.add.image(x, y, 'fx:coin').setScale(2).setDepth(9300);
+      this.tweens.add({
+        targets: c, x: x + Phaser.Math.Between(-50, 50), y: y - Phaser.Math.Between(40, 90), alpha: 0, duration: Phaser.Math.Between(500, 800), ease: 'Cubic.easeOut',
+        onComplete: () => c.destroy(),
+      });
+    }
   }
 
   private puff(x: number, y: number, color: number, scale: number): void {

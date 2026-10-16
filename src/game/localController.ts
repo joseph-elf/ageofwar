@@ -5,6 +5,7 @@ import { createGame } from '../sim/state';
 import { drainEvents, step } from '../sim/step';
 import type { CmdResult, Command, GameState, Side, SimEvent } from '../sim/types';
 import type { GameController, NetStatus } from './controller';
+import { settings } from './settings';
 
 /** Single-player: runs the simulation locally at a fixed tick rate and drives an AI for side 1. */
 export class LocalController implements GameController {
@@ -24,7 +25,7 @@ export class LocalController implements GameController {
 
   constructor(readonly difficulty: Difficulty, seed = Date.now() >>> 0) {
     const d = DIFFICULTY[difficulty];
-    this.state = createGame({ seed, goldMult: [1, d.goldMult], xpMult: [1, d.xpMult], incomeMult: [1, d.incomeMult], trainSpeed: [1, d.trainSpeed], power: [1, d.power] });
+    this.state = createGame({ seed, roster: settings.roster, goldMult: [1, d.goldMult], xpMult: [1, d.xpMult], incomeMult: [1, d.incomeMult], trainSpeed: [1, d.trainSpeed], power: [1, d.power] });
     this.ai = new AI(1, difficulty, seed);
     this.label = `vs AI (${d.label})`;
   }

@@ -1,4 +1,4 @@
-import { buildBases } from './bases';
+import { buildBases, buildMines } from './bases';
 import { buildBackground, buildGround } from './backgrounds';
 import { buildIcons } from './icons';
 import { buildMisc } from './misc';
@@ -21,6 +21,7 @@ export function buildAllArt(onStep?: (label: string) => void): void {
   put(buildTurretFrames());
   onStep?.('bases');
   put(buildBases());
+  put(buildMines());
   onStep?.('effects');
   put(buildMisc());
   put(buildIcons());

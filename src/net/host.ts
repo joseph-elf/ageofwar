@@ -1,6 +1,7 @@
 import { RECONNECT_GRACE_SEC, SNAPSHOT_EVERY_TICKS } from '../data/config';
 import { applyCommand } from '../sim/commands';
 import { createGame } from '../sim/state';
+import type { Roster } from '../data/ages';
 import { drainEvents, forfeit, step } from '../sim/step';
 import type { CmdResult, Command, GameState, SimEvent } from '../sim/types';
 import { BUILD_VERSION, type Msg, type Transport } from './protocol';
@@ -12,6 +13,7 @@ export interface HostOptions {
   graceMs?: number;
   onJoin?: () => void; // first valid guest arrived: start the match
   onReject?: (reason: string) => void;
+  roster?: Roster;
 }
 
 /**
@@ -36,7 +38,7 @@ export class HostSession {
   private graceMs: number;
 
   constructor(readonly seed: number, private opts: HostOptions = {}) {
-    this.state = createGame({ seed });
+    this.state = createGame({ seed, roster: opts.roster });
     this.now = opts.now ?? (() => performance.now());
     this.graceMs = opts.graceMs ?? RECONNECT_GRACE_SEC * 1000;
   }

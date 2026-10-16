@@ -42,5 +42,12 @@ export function buildIcons(): Map<string, Pix> {
   add('icon:slot', (p) => {
     p.r(7, 3, 2, 10, '#9fe870').r(3, 7, 10, 2, '#9fe870');
   });
+  add('icon:econ', (p) => {
+    p.disc(8, 11, 4, '#b8861a').disc(8, 11, 3, '#f5c542').p(7, 10, '#fff2a8').p(8, 10, '#fff2a8').p(9, 13, '#d8a82a');
+    p.disc(12, 13, 2, '#f5c542').p(12, 12, '#fff2a8');
+    p.line(4, 14, 0.7, -1, 12, '#8a5a2a', 2);
+    p.line(5, 1.5, 1, 0.5, 10, '#cfd6e0', 2);
+    p.p(5, 1, '#fff');
+  });
   return m;
 }

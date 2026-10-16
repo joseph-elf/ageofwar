@@ -1,9 +1,10 @@
-import { AGES } from '../data/ages';
+import { AGES, type Roster } from '../data/ages';
 import { LANE_LENGTH, BASE_FRONT, MAX_TURRET_SLOTS, START_GOLD, START_TURRET_SLOTS } from '../data/config';
 import type { GameState, PlayerState, Side } from './types';
 
 export interface GameOptions {
   seed: number;
+  roster?: Roster;
   goldMult?: [number, number];
   xpMult?: [number, number];
   incomeMult?: [number, number];
@@ -29,6 +30,7 @@ function makePlayer(goldMult: number, xpMult: number, incomeMult: number, trainS
     trainSpeed,
     power,
     lastStand: false,
+    econ: 0,
     stats: { trained: 0, kills: 0, goldEarned: 0, damage: 0 },
   };
 }
@@ -44,6 +46,7 @@ export function createGame(opts: GameOptions): GameState {
     specials: [],
     events: [],
     winner: null,
+    roster: opts.roster ?? 'extended',
   };
 }
 

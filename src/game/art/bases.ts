@@ -127,3 +127,72 @@ export function buildBases(): Map<string, Pix> {
   });
   return out;
 }
+
+export const MINE_W = 28;
+export const MINE_H = 20;
+
+/** Gold Mine levels 1..4: a rocky mound with a timbered entrance; higher levels add carts, a gold pile and a lantern. */
+export function buildMines(): Map<string, Pix> {
+  const out = new Map<string, Pix>();
+  const cart = (p: Pix, x: number, y: number) => {
+    p.r(x, y + 1, 7, 3, '#5a5d68');
+    p.r(x - 1, y, 9, 1, '#8a92a0');
+    p.r(x + 1, y - 1, 5, 1, '#f5c542');
+    p.p(x + 2, y - 2, '#f5c542');
+    p.p(x + 3, y - 2, '#fff2a8');
+    p.p(x + 1, y + 4, '#222');
+    p.p(x + 5, y + 4, '#222');
+  };
+  for (let lv = 1; lv <= 4; lv++) {
+    const p = new Pix(MINE_W, MINE_H);
+    // rocky mound
+    for (let y = 4; y < MINE_H; y++) {
+      const t = (19 - y) / 15;
+      const hw = 9.5 * Math.sqrt(Math.max(0, 1 - t * t));
+      for (let x = Math.round(9 - hw); x < Math.round(9 + hw); x++) p.p(x, y, shade(hash(x * 31 + y) > 0.5 ? '#8a7e6e' : '#6e6052', (hash(x + y * 7) - 0.5) * 24));
+    }
+    for (const [x, y] of [[3, 14], [15, 15], [7, 6]]) p.p(x, y, '#f5c542');
+    // timbered entrance
+    p.r(5, 10, 8, 9, '#1a1420');
+    p.r(6, 9, 6, 1, '#1a1420');
+    p.r(4, 9, 2, 10, '#8a5a2a');
+    p.r(12, 9, 2, 10, '#8a5a2a');
+    p.r(3, 8, 12, 2, '#a8743c');
+    p.r(3, 8, 12, 1, '#c89a5a');
+    if (lv === 1) {
+      p.line(16, 13, 0.3, 1, 6, '#6a4a2a'); // pickaxe leaning on the mound
+      p.r(15, 12, 4, 1, '#cfd6e0');
+    }
+    if (lv >= 2) {
+      p.r(6, 18, 22, 1, '#5a5d68'); // rails
+      for (let x = 7; x < 28; x += 3) p.p(x, 19, '#4a3320');
+      cart(p, 19, 14);
+    }
+    if (lv >= 3) {
+      cart(p, 6, 14); // second cart waiting in the entrance
+      p.r(1, 17, 5, 2, '#d8a82a'); // glittering gold pile
+      p.r(2, 16, 3, 1, '#f5c542');
+      p.p(3, 15, '#f5c542');
+      p.p(2, 17, '#fff2a8');
+      p.p(4, 16, '#fff2a8');
+    }
+    if (lv >= 4) {
+      p.r(0, 18, 7, 1, '#d8a82a');
+      p.r(1, 15, 4, 1, '#f5c542');
+      p.p(14, 9, '#3a2a20'); // hanging lantern
+      p.r(14, 10, 2, 3, '#ffcf3a');
+      p.p(14, 11, '#fff2a8');
+      p.p(13, 11, '#9a7a2a');
+      p.p(16, 11, '#9a7a2a');
+      for (const [x, y] of [[2, 13], [22, 11]]) {
+        p.p(x, y, '#fff');
+        p.p(x - 1, y, '#fff2a8');
+        p.p(x + 1, y, '#fff2a8');
+        p.p(x, y - 1, '#fff2a8');
+        p.p(x, y + 1, '#fff2a8');
+      }
+    }
+    out.set(`mine:${lv}`, p);
+  }
+  return out;
+}

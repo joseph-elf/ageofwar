@@ -1,4 +1,5 @@
-import type { ProjKind } from '../data/units';
+import type { Roster } from '../data/ages';
+import type { ProjKind, Role } from '../data/units';
 
 export type Side = 0 | 1;
 
@@ -8,6 +9,7 @@ export type Command =
   | { type: 'SELL_TURRET'; slot: number }
   | { type: 'BUY_TURRET_SLOT' }
   | { type: 'USE_SPECIAL' }
+  | { type: 'BUY_ECON' }
   | { type: 'EVOLVE' };
 
 export interface CmdResult {
@@ -25,6 +27,10 @@ export interface Unit {
   mode: 'walk' | 'fight' | 'wait';
   lastAtk: number; // tick of last attack (animation)
   killer?: Side; // set when hp <= 0
+  slow?: number; // ticks of slow remaining (renderer may tint slowed units)
+  slowF?: number; // speed multiplier while slowed (0..1)
+  healCd?: number; // support units: ticks until the next heal
+  lastHeal?: number; // tick of the last heal cast (animation)
 }
 
 export interface TurretState {
@@ -64,6 +70,8 @@ export interface PlayerState {
   trainSpeed: number;
   power: number;
   lastStand: boolean;
+  /** Gold Mine level (0 = none). Each level raises passive income. */
+  econ: number;
   stats: PlayerStats;
 }
 
@@ -81,6 +89,12 @@ export interface Projectile {
   damage: number;
   splash: number;
   crit: boolean;
+  /** Damage multipliers against target roles (anti-armour etc.). */
+  bonus?: Partial<Record<Role, number>>;
+  /** Multiplier on damage dealt to the enemy base (siege). */
+  baseMult?: number;
+  /** Slows what it hits: speed multiplier `f` for `t` ticks. */
+  slow?: { f: number; t: number };
 }
 
 export interface ActiveSpecial {
@@ -99,6 +113,9 @@ export type SimEvent =
   | { k: 'base_hit'; owner: Side; dmg: number }
   | { k: 'shot'; x: number; kind: ProjKind; owner: Side }
   | { k: 'melee'; x: number; owner: Side }
+  | { k: 'heal'; id: number; x: number; amount: number; owner: Side }
+  | { k: 'slowed'; x: number; owner: Side; radius: number }
+  | { k: 'econ'; owner: Side; level: number }
   | { k: 'special'; owner: Side; def: string }
   | { k: 'strike'; x: number; owner: Side; def: string; radius: number; delay: number }
   | { k: 'evolve'; owner: Side; age: number }
@@ -119,4 +136,6 @@ export interface GameState {
   events: SimEvent[];
   winner: Side | null;
   winReason?: string;
+  /** Which units/turrets are available (missing = 'extended'). */
+  roster?: Roster;
 }

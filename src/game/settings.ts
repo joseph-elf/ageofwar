@@ -1,3 +1,5 @@
+import type { Roster } from '../data/ages';
+
 export interface Settings {
   volume: number; // 0..1 (sound effects)
   musicVolume: number; // 0..1
@@ -12,6 +14,8 @@ export interface Settings {
   turnUrls: string;
   turnUser: string;
   turnPass: string;
+  /** Unit roster for new games: classic (original units) or extended (new units and turrets). */
+  roster: Roster;
 }
 
 const env = import.meta.env as Record<string, string | undefined>;
@@ -27,6 +31,7 @@ const DEFAULTS: Settings = {
   turnUrls: env.VITE_TURN_URLS ?? '',
   turnUser: env.VITE_TURN_USER ?? '',
   turnPass: env.VITE_TURN_PASS ?? '',
+  roster: 'extended',
 };
 const KEY = 'ages-of-war-ii.settings';
 

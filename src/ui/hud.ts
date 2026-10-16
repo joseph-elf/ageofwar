@@ -1,5 +1,5 @@
-import { AGES, LAST_AGE } from '../data/ages';
-import { LANE_LENGTH, MAX_TURRET_SLOTS, QUEUE_MAX, TICK_RATE } from '../data/config';
+import { AGES, LAST_AGE, turretsOf, unitsOf } from '../data/ages';
+import { LANE_LENGTH, MAX_TURRET_SLOTS, MINE_COSTS, MINE_INCOME, PASSIVE_GOLD, QUEUE_MAX, SELL_REFUND, TICK_RATE } from '../data/config';
 import { SPECIALS } from '../data/specials';
 import { TURRETS } from '../data/turrets';
 import { UNITS } from '../data/units';
@@ -7,7 +7,7 @@ import { artUrl, turretIcon, unitIcon } from '../game/art';
 import { sfx } from '../game/audio';
 import type { GameController } from '../game/controller';
 import { saveSettings, settings } from '../game/settings';
-import { nextSlotCost } from '../sim/commands';
+import { nextMineCost, nextSlotCost } from '../sim/commands';
 import type { Command } from '../sim/types';
 
 export interface HudHost {
@@ -20,7 +20,10 @@ export interface HudActions {
   onRematch?: () => void;
 }
 
-const KEY_LABEL = { units: ['1', '2', '3', '4'], turrets: ['Q', 'W', 'E'] };
+const KEY_LABEL = { units: ['1', '2', '3', '4', '5'], turrets: ['Q', 'W', 'E', 'R'] };
+const ROLE_LABEL: Record<string, string> = { melee: 'melee', ranged: 'ranged', heavy: 'heavy', super: 'elite', support: 'support', siege: 'siege' };
+const bonusText = (b?: Partial<Record<string, number>>) =>
+  b ? Object.entries(b).map(([r, m]) => `x${m} vs ${ROLE_LABEL[r] ?? r}`).join(', ') : '';
 
 const $ = <T extends HTMLElement>(root: ParentNode, sel: string): T => root.querySelector(sel) as T;
 const fmt = (n: number) => (n >= 10000 ? `${(n / 1000).toFixed(n >= 100000 ? 0 : 1)}k` : String(Math.floor(n)));
@@ -31,6 +34,7 @@ export class Hud {
   private cache = new Map<string, string>();
   private age = -1;
   private ageShown = -1;
+  private rosterShown = '';
   private slotsShown = -1;
   private onKey: (e: KeyboardEvent) => void;
   private onResize: () => void;
@@ -72,6 +76,7 @@ export class Hud {
         <div class="panel turrets"><h4>Turrets</h4><div class="tbtns" data-r="tbtns"></div><div class="slots" data-r="slots"></div></div>
         <div class="panel actions">
           <button class="special" data-r="special"><i class="ring"></i><img data-r="specialicon" alt=""><span class="key">S</span><em data-r="specialcd"></em></button>
+          <button class="mine" data-r="mine"><img data-r="mineicon" alt=""><span class="key">G</span><em data-r="minesub"></em></button>
           <button class="evolve" data-r="evolve"><b>Evolve</b><small data-r="evolvesub"></small><span class="key">V</span></button>
         </div>
       </div>
@@ -233,6 +238,14 @@ export class Hud {
     else rematch.classList.add('hidden');
     this.r('special').onclick = () => this.cmd({ type: 'USE_SPECIAL' });
     this.r('evolve').onclick = () => this.cmd({ type: 'EVOLVE' });
+    this.r('mine').onclick = () => this.cmd({ type: 'BUY_ECON' });
+    this.r<HTMLImageElement>('mineicon').src = artUrl('icon:econ');
+    this.tipFor(this.r('mine'), () => {
+      const p = this.me();
+      const cost = nextMineCost(p.econ);
+      const per = (PASSIVE_GOLD[p.age] * MINE_INCOME).toFixed(1);
+      return `<h5>Gold Mine <kbd>G</kbd></h5><p>Level ${p.econ} / ${MINE_COSTS.length}. Each level adds +${Math.round(MINE_INCOME * 100)}% passive gold (+${per}/s in this age).</p><p class="dim">${cost === null ? 'Fully upgraded.' : `Next level: ${cost} gold. An investment: weaker army now, more gold later.`}</p>`;
+    });
     this.r('dbg-gold').onclick = () => this.ctl.debugGrant(1000, 0);
     this.r('dbg-xp').onclick = () => this.ctl.debugGrant(0, 1000);
     this.r('dbg-big').onclick = () => this.ctl.debugGrant(50000, 50000);
@@ -270,10 +283,11 @@ export class Hud {
   private buildAge(): void {
     const p = this.me();
     this.ageShown = p.age;
+    this.rosterShown = this.ctl.state.roster ?? 'extended';
     const age = AGES[p.age];
     const ub = this.r('ubtns');
     ub.innerHTML = '';
-    age.units.forEach((id, i) => {
+    unitsOf(age, this.ctl.state.roster).forEach((id, i) => {
       const d = UNITS[id];
       const b = document.createElement('button');
       b.className = 'ubtn' + (d.role === 'super' ? ' super' : '');
@@ -284,13 +298,14 @@ export class Hud {
         const dps = (d.damage / d.attackInterval).toFixed(1);
         return `<h5>${d.name} <kbd>${KEY_LABEL.units[i]}</kbd></h5><p>${d.desc}</p>
           <table><tr><td>Cost</td><td>${d.cost} gold</td></tr><tr><td>Health</td><td>${d.hp}</td></tr><tr><td>Damage</td><td>${d.damage} (${dps}/s)${d.proj?.splash ? ' area' : ''}</td></tr>
-          <tr><td>Range</td><td>${d.range}</td></tr><tr><td>Speed</td><td>${d.speed}</td></tr><tr><td>Train time</td><td>${d.trainTime}s</td></tr><tr><td>Bounty</td><td>${d.gold} gold, ${d.xp} xp</td></tr></table>`;
+          ${d.heal ? `<tr><td>Heals</td><td>${d.heal.amount} every ${d.heal.interval}s</td></tr>` : ''}${d.bonus ? `<tr><td>Bonus</td><td>${bonusText(d.bonus)}</td></tr>` : ''}${d.baseMult ? `<tr><td>Vs base</td><td>x${d.baseMult} damage</td></tr>` : ''}
+          <tr><td>Range</td><td>${d.range}</td></tr><tr><td>Speed</td><td>${Math.round(d.speed)}</td></tr><tr><td>Train time</td><td>${d.trainTime}s</td></tr><tr><td>Bounty</td><td>${d.gold} gold, ${d.xp} xp</td></tr></table>`;
       });
       ub.appendChild(b);
     });
     const tb = this.r('tbtns');
     tb.innerHTML = '';
-    age.turrets.forEach((id, i) => {
+    turretsOf(age, this.ctl.state.roster).forEach((id, i) => {
       const d = TURRETS[id];
       const b = document.createElement('button');
       b.className = 'tbtn';
@@ -300,7 +315,7 @@ export class Hud {
       this.tipFor(b, () => {
         const dps = (d.damage / d.fireInterval).toFixed(1);
         return `<h5>${d.name} <kbd>${KEY_LABEL.turrets[i]}</kbd></h5><p>${d.desc}</p>
-          <table><tr><td>Cost</td><td>${d.cost} gold</td></tr><tr><td>Damage</td><td>${d.damage} (${dps}/s)${d.proj.splash ? ' area' : ''}</td></tr><tr><td>Range</td><td>${d.range}</td></tr><tr><td>Fire rate</td><td>${(1 / d.fireInterval).toFixed(2)}/s</td></tr></table><p class="dim">Placed in the first free slot. Sells for 50%.</p>`;
+          <table><tr><td>Cost</td><td>${d.cost} gold</td></tr><tr><td>Damage</td><td>${d.damage} (${dps}/s)${d.proj.splash ? ' area' : ''}</td></tr>${d.bonus ? `<tr><td>Bonus</td><td>${bonusText(d.bonus)}</td></tr>` : ''}${d.slow ? `<tr><td>Slow</td><td>${Math.round((1 - d.slow.factor) * 100)}% for ${d.slow.duration}s</td></tr>` : ''}<tr><td>Range</td><td>${d.range}</td></tr><tr><td>Fire rate</td><td>${(1 / d.fireInterval).toFixed(2)}/s</td></tr></table><p class="dim">Placed in the first free slot. Sells for ${Math.round(SELL_REFUND * 100)}%.</p>`;
       });
       tb.appendChild(b);
     });
@@ -326,13 +341,13 @@ export class Hud {
         c.onclick = () => this.cmd({ type: 'SELL_TURRET', slot: i });
         this.tipFor(c, () => {
           const t = this.me().turrets[i];
-          return t ? `<h5>${TURRETS[t.def].name}</h5><p>Click to sell for ${Math.floor(t.paid * 0.5)} gold <kbd>Shift+${i + 1}</kbd></p>` : '<p>Empty slot. Buy a turret with Q / W / E.</p>';
+          return t ? `<h5>${TURRETS[t.def].name}</h5><p>Click to sell for ${Math.floor(t.paid * SELL_REFUND)} gold <kbd>Shift+${i + 1}</kbd></p>` : '<p>Empty slot. Buy a turret with Q / W / E / R.</p>';
         });
       } else {
         c.onclick = () => this.cmd({ type: 'BUY_TURRET_SLOT' });
         this.tipFor(c, () => {
           const cost = nextSlotCost(this.me().slotCount);
-          return i === this.me().slotCount ? `<h5>Buy turret slot <kbd>R</kbd></h5><p>${cost} gold</p>` : '<p>Locked. Buy slots in order.</p>';
+          return i === this.me().slotCount ? `<h5>Buy turret slot <kbd>B</kbd></h5><p>${cost} gold</p>` : '<p>Locked. Buy slots in order.</p>';
         });
       }
       box.appendChild(c);
@@ -352,7 +367,7 @@ export class Hud {
   private explain(r: string): string {
     const m: Record<string, string> = {
       'not enough gold': 'Not enough gold!', 'queue full': 'Training queue is full', 'not enough xp': 'Not enough XP to evolve yet', 'special on cooldown': 'Special is still recharging',
-      'slot occupied': 'That slot is occupied', 'invalid slot': 'No free slot', 'max slots': 'All turret slots owned', 'only one at a time': 'Only one Colossus at a time', paused: 'Game is paused',
+      'slot occupied': 'That slot is occupied', 'invalid slot': 'No free slot', 'max slots': 'All turret slots owned', 'only one at a time': 'Only one Colossus at a time', 'max mine': 'Gold Mine is fully upgraded', paused: 'Game is paused',
     };
     return m[r] ?? r;
   }
@@ -369,7 +384,7 @@ export class Hud {
     const slot = p.turrets.findIndex((t, i) => i < p.slotCount && !t);
     if (slot < 0) {
       sfx.play('error');
-      this.toast(p.slotCount < MAX_TURRET_SLOTS ? 'No free slot — buy another slot (R) or sell a turret' : 'No free slot — sell a turret first');
+      this.toast(p.slotCount < MAX_TURRET_SLOTS ? 'No free slot — buy another slot (B) or sell a turret' : 'No free slot — sell a turret first');
       return;
     }
     this.cmd({ type: 'BUY_TURRET', slot, turret: id });
@@ -385,20 +400,23 @@ export class Hud {
     }
     if (e.repeat || e.ctrlKey || e.metaKey || e.altKey) return;
     const age = AGES[this.me().age];
-    const digit = /^(Digit|Numpad)([1-4])$/.exec(e.code);
+    const units = unitsOf(age, this.ctl.state.roster);
+    const digit = /^(Digit|Numpad)([1-5])$/.exec(e.code);
     if (digit) {
       const i = Number(digit[2]) - 1;
-      if (e.shiftKey) this.cmd({ type: 'SELL_TURRET', slot: i });
-      else if (age.units[i]) this.cmd({ type: 'TRAIN_UNIT', unit: age.units[i] });
+      if (e.shiftKey) {
+        if (i < MAX_TURRET_SLOTS) this.cmd({ type: 'SELL_TURRET', slot: i });
+      } else if (units[i]) this.cmd({ type: 'TRAIN_UNIT', unit: units[i] });
       return;
     }
     switch (e.code) {
-      case 'KeyQ': case 'KeyW': case 'KeyE': {
-        const id = age.turrets['QWE'.indexOf(e.code[3])];
+      case 'KeyQ': case 'KeyW': case 'KeyE': case 'KeyR': {
+        const id = turretsOf(age, this.ctl.state.roster)['QWER'.indexOf(e.code[3])];
         if (id) this.buyTurret(id);
         break;
       }
-      case 'KeyR': this.cmd({ type: 'BUY_TURRET_SLOT' }); break;
+      case 'KeyB': this.cmd({ type: 'BUY_TURRET_SLOT' }); break;
+      case 'KeyG': this.cmd({ type: 'BUY_ECON' }); break;
       case 'KeyS': this.cmd({ type: 'USE_SPECIAL' }); break;
       case 'KeyV': this.cmd({ type: 'EVOLVE' }); break;
       case 'KeyM': this.toggleMute(); break;
@@ -458,7 +476,7 @@ export class Hud {
     const s = this.ctl.state;
     const p = this.me();
     const o = s.players[1 - this.ctl.me];
-    if (p.age !== this.ageShown) this.buildAge();
+    if (p.age !== this.ageShown || (s.roster ?? 'extended') !== this.rosterShown) this.buildAge();
     if (p.slotCount !== this.slotsShown) this.buildSlots();
     const age = AGES[p.age];
 
@@ -528,6 +546,11 @@ export class Hud {
       this.cache.set('spicon', icon);
       this.r<HTMLImageElement>('specialicon').src = icon;
     }
+    // gold mine
+    const mineCost = nextMineCost(p.econ);
+    this.cls('mine', 'ready', mineCost !== null && p.gold >= mineCost);
+    this.cls('mine', 'maxed', mineCost === null);
+    this.set('minesub', mineCost === null ? `Lv ${p.econ}` : `Lv ${p.econ} · ${fmt(mineCost)}`);
     // evolve
     const canEvolve = p.age < LAST_AGE && p.xp >= need;
     this.cls('evolve', 'ready', canEvolve);
@@ -586,7 +609,7 @@ export class Hud {
     }
     for (const u of s.units) {
       g.fillStyle = u.owner === this.ctl.me ? '#9ae6ff' : '#ff9a9a';
-      const big = UNITS[u.def].role === 'heavy' || UNITS[u.def].role === 'super';
+      const big = UNITS[u.def].role === 'heavy' || UNITS[u.def].role === 'super' || UNITS[u.def].role === 'siege';
       g.fillRect(mx(u.x) - 1, H - 12 - (big ? 3 : 0), big ? 4 : 3, big ? 8 : 5);
     }
     const v = this.host.getView();

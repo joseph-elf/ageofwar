@@ -5,6 +5,7 @@ import { GuestSession } from './guest';
 import { HostSession } from './host';
 import { HostController } from './hostController';
 import { createRoom, joinRoom } from './lobby';
+import { settings } from '../game/settings';
 
 /** Create-game flow: open a room, wait for a guest, then hand a HostController to the shell. */
 export function hostGame(ui: LobbyUi, start: (c: GameController) => void): LobbyHandle {
@@ -17,6 +18,7 @@ export function hostGame(ui: LobbyUi, start: (c: GameController) => void): Lobby
       start(new HostController(session, () => room.close()));
     },
     onReject: (reason) => ui.status(reason, 'error'),
+    roster: settings.roster,
   });
   const room = createRoom({
     onCode: (code) => {
